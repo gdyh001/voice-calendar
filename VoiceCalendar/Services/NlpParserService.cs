@@ -126,7 +126,7 @@ public class NlpParserService
         }
 
         var timeMatch = Regex.Match(text,
-            @"(\d{1,2}|[一二三四五六七八九十]{1,3})\s*点(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十]{1,3})\s*分)?)|(一刻)?)");
+            @"(\d{1,2}|[一二三四五六七八九十]{1,3})\s*点(?:钟)?(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十]{1,3})\s*分)?)|(一刻)?)");
 
         if (!timeMatch.Success) return null;
 
