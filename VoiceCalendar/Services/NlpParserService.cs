@@ -1,0 +1,184 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+namespace VoiceCalendar.Services;
+
+public class NlpParserService
+{
+    private static readonly Dictionary<string, int> DateKeywords = new()
+    {
+        {"今天", 0}, {"今日", 0},
+        {"明天", 1}, {"明日", 1},
+        {"后天", 2}, {"后日", 2},
+        {"大后天", 3},
+    };
+
+    private static readonly Dictionary<string, int> WeekdayNames = new()
+    {
+        {"周一", 0}, {"周二", 1}, {"周三", 2}, {"周四", 3}, {"周五", 4}, {"周六", 5}, {"周日", 6},
+        {"星期一", 0}, {"星期二", 1}, {"星期三", 2}, {"星期四", 3}, {"星期五", 4}, {"星期六", 5}, {"星期天", 6},
+        {"礼拜一", 0}, {"礼拜二", 1}, {"礼拜三", 2}, {"礼拜四", 3}, {"礼拜五", 4}, {"礼拜六", 5}, {"礼拜天", 6},
+    };
+
+    private static readonly Dictionary<string, int> CnNum = new()
+    {
+        {"一", 1}, {"二", 2}, {"三", 3}, {"四", 4}, {"五", 5},
+        {"六", 6}, {"七", 7}, {"八", 8}, {"九", 9}, {"十", 10},
+        {"十一", 11}, {"十二", 12}, {"两", 2}, {"零", 0},
+    };
+
+    private static readonly string[] AddKeywords = { "添加", "新增", "增加", "加入", "加一个", "记一个", "记录", "提醒我", "提醒", "新建", "创建" };
+    private static readonly string[] DeleteKeywords = { "删除", "删掉", "去掉", "取消", "移除", "清除", "删", "去除" };
+    private static readonly string[] QueryKeywords = { "查看", "查询", "看", "显示", "有什么", "什么事", "有哪些", "列出" };
+
+    public class ParseResult
+    {
+        public string Action { get; set; } = "add";
+        public DateTime? Date { get; set; }
+        public string? Time { get; set; }
+        public string Title { get; set; } = "";
+        public string Raw { get; set; } = "";
+    }
+
+    public ParseResult Parse(string text)
+    {
+        var today = DateTime.Today;
+        var result = new ParseResult { Raw = text };
+
+        result.Action = ParseAction(text);
+        result.Date = ParseDate(text, today);
+        result.Time = ParseTime(text);
+        result.Title = ExtractTitle(text);
+
+        return result;
+    }
+
+    private static string ParseAction(string text)
+    {
+        foreach (var kw in AddKeywords)
+            if (text.Contains(kw)) return "add";
+        foreach (var kw in DeleteKeywords)
+            if (text.Contains(kw)) return "delete";
+        foreach (var kw in QueryKeywords)
+            if (text.Contains(kw)) return "query";
+        return "add";
+    }
+
+    public static DateTime? ParseDate(string text, DateTime? today = null)
+    {
+        today ??= DateTime.Today;
+        var t = today.Value;
+
+        foreach (var (kw, offset) in DateKeywords)
+            if (text.Contains(kw))
+                return t.AddDays(offset);
+
+        var nextWeek = Regex.Match(text, @"下周([一二三四五六日天])");
+        if (nextWeek.Success)
+        {
+            var dayKey = "周" + nextWeek.Groups[1].Value;
+            if (WeekdayNames.TryGetValue(dayKey, out int wd))
+            {
+                int daysAhead = (wd - ((int)t.DayOfWeek + 6) % 7 + 7) % 7;
+                if (daysAhead == 0) daysAhead = 7;
+                return t.AddDays(daysAhead + 7);
+            }
+        }
+
+        foreach (var (name, wd) in WeekdayNames)
+        {
+            if (text.Contains(name))
+            {
+                int daysAhead = (wd - ((int)t.DayOfWeek + 6) % 7 + 7) % 7;
+                if (daysAhead == 0) daysAhead = 7;
+                return t.AddDays(daysAhead);
+            }
+        }
+
+        var md = Regex.Match(text, @"(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]");
+        if (md.Success)
+        {
+            int m = int.Parse(md.Groups[1].Value);
+            int d = int.Parse(md.Groups[2].Value);
+            try
+            {
+                var parsed = new DateTime(t.Year, m, d);
+                if (parsed < t) parsed = new DateTime(t.Year + 1, m, d);
+                return parsed;
+            }
+            catch { return null; }
+        }
+
+        return null;
+    }
+
+    public static string? ParseTime(string text)
+    {
+        var hhmm = Regex.Match(text, @"(\d{1,2})\s*[:：]\s*(\d{2})");
+        if (hhmm.Success)
+        {
+            int hh = int.Parse(hhmm.Groups[1].Value);
+            int m = int.Parse(hhmm.Groups[2].Value);
+            if (hh >= 0 && hh <= 23 && m >= 0 && m <= 59)
+                return $"{hh:D2}:{m:D2}";
+        }
+
+        var timeMatch = Regex.Match(text,
+            @"(\d{1,2}|[一二三四五六七八九十]{1,3})\s*点(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十]{1,3})\s*分)?)|(一刻)?)");
+
+        if (!timeMatch.Success) return null;
+
+        int hour = 0;
+        var hourStr = timeMatch.Groups[1].Value;
+        if (int.TryParse(hourStr, out int h)) hour = h;
+        else if (CnNum.TryGetValue(hourStr, out int ch)) hour = ch;
+        else return null;
+
+        int minute = 0;
+        if (timeMatch.Groups[2].Success) minute = 30;
+        else if (timeMatch.Groups[4].Success) minute = 15;
+        else if (timeMatch.Groups[3].Success)
+        {
+            var minStr = timeMatch.Groups[3].Value;
+            if (int.TryParse(minStr, out int mm)) minute = mm;
+            else if (CnNum.TryGetValue(minStr, out int cm)) minute = cm;
+        }
+
+        if (text.Contains("下午") || text.Contains("晚上"))
+        {
+            if (hour < 12) hour += 12;
+        }
+        else if (text.Contains("上午") && hour == 12)
+        {
+            hour = 0;
+        }
+
+        if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59)
+            return $"{hour:D2}:{minute:D2}";
+
+        return null;
+    }
+
+    public static string ExtractTitle(string text)
+    {
+        var title = text;
+
+        foreach (var kw in AddKeywords.Concat(DeleteKeywords).Concat(QueryKeywords))
+            title = title.Replace(kw, "");
+
+        foreach (var kw in DateKeywords.Keys) title = title.Replace(kw, "");
+        foreach (var kw in WeekdayNames.Keys) title = title.Replace(kw, "");
+
+        title = Regex.Replace(title, @"\d{1,2}\s*月\s*\d{1,2}\s*[日号]", "");
+        title = Regex.Replace(title, @"\d{1,2}\s*[:：]\s*\d{2}", "");
+        title = Regex.Replace(title, @"\d{1,2}\s*点\s*(半|一刻|\d{1,2}\s*分)?", "");
+        title = Regex.Replace(title, @"(上午|下午|晚上|中午)", "");
+        title = title.Replace("下周", "");
+        title = Regex.Replace(title, @"[，,。.!！?？;；、]", "");
+
+        title = title.Trim();
+        return string.IsNullOrEmpty(title) ? "未命名事件" : title;
+    }
+}

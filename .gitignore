@@ -1,23 +1,26 @@
-﻿# Python
+﻿# .NET / C#
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+*.DotSettings.user
+
+# Build
+VoiceCalendar/bin/
+VoiceCalendar/obj/
+events.json
+
+# Python (old)
 __pycache__/
 *.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-
-# Virtual Environment
-venv/
-.venv/
+*.wav
 
 # IDE
-.vscode/
+.vs/
 .idea/
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Project
-*.wav
-events.json
