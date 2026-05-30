@@ -3,6 +3,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using VoiceCalendar.Models;
+using VoiceCalendar.Services;
 using VoiceCalendar.ViewModels;
 
 namespace VoiceCalendar;
@@ -10,6 +11,7 @@ namespace VoiceCalendar;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
+    private readonly VoiceService _voiceService = new();
 
     public MainWindow()
     {
@@ -91,17 +93,31 @@ public partial class MainWindow : Window
     private async void BtnVoice_Click(object sender, RoutedEventArgs e)
     {
         BtnVoice.IsEnabled = false;
+        BtnVoice.Content = "正在聆听...";
+        _vm.StatusText = "正在聆听...";
+
         try
         {
-            await _vm.VoiceInputAsync();
-            CalendarView.Refresh();
+            var text = await _voiceService.ListenAsync(8000);
+            if (text.StartsWith("["))
+                _vm.StatusText = text;
+            else
+            {
+                _vm.StatusText = $"识别: {text}";
+                _vm.ProcessVoiceCommand(text);
+                CalendarView.Refresh();
+            }
+        }
+        catch (Exception ex)
+        {
+            _vm.StatusText = $"错误: {ex.Message}";
         }
         finally
         {
             BtnVoice.IsEnabled = true;
+            BtnVoice.Content = "🎤 语音输入";
         }
     }
-
     // === 手动添加事件 ===
 
     private void BtnAddEvent_Click(object sender, RoutedEventArgs e)
