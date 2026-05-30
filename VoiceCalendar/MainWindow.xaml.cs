@@ -105,29 +105,6 @@ public partial class MainWindow : Window
             BtnVoice.Content = "🎤 语音输入";
         }
     }
-
-    // === 文字指令输入 ===
-    private void BtnSendCommand_Click(object sender, RoutedEventArgs e) => ExecuteTextCommand();
-
-    private void TxtCommand_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == System.Windows.Input.Key.Enter)
-        {
-            ExecuteTextCommand();
-            e.Handled = true;
-        }
-    }
-
-    private void ExecuteTextCommand()
-    {
-        var text = TxtCommand.Text.Trim();
-        if (string.IsNullOrEmpty(text)) return;
-        _vm.StatusText = $"指令: {text}";
-        _vm.ProcessVoiceCommand(text);
-        CalendarView.Refresh();
-        TxtCommand.Text = "";
-    }
-
     // === 手动添加 ===
     private void BtnAddEvent_Click(object sender, RoutedEventArgs e)
     {

@@ -52,7 +52,6 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Margin="0,0,0,12">
                         <TextBlock x:Name="TxtSelectedDate" Text="5月30日" FontSize="22" FontWeight="Bold" Foreground="{StaticResource IosDarkText}"/>
@@ -86,17 +85,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <Border Grid.Row="3" Background="#F2F2F7" CornerRadius="8" Padding="4" Margin="0,8,0,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtCommand" Grid.Column="0" FontSize="13" Padding="8,6,8,6" BorderThickness="0" Background="Transparent" VerticalAlignment="Center" KeyDown="TxtCommand_KeyDown"></TextBox>
-                            <Button Grid.Column="1" Content="发送" Style="{StaticResource IosNavButton}" FontSize="13" Click="BtnSendCommand_Click"/>
-                        </Grid>
-                    </Border>
-                    <Button Grid.Row="4" Content="+ 添加事件" Style="{StaticResource IosPrimaryButton}" Click="BtnAddEvent_Click" HorizontalAlignment="Stretch"/>
+                    <Button Grid.Row="3" Content="+ 添加事件" Style="{StaticResource IosPrimaryButton}" Click="BtnAddEvent_Click" HorizontalAlignment="Stretch"/>
                 </Grid>
             </Border>
         </Grid>
