@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -57,7 +57,7 @@ public partial class CalendarView : UserControl
                     bool hasEvents = eventCounts.TryGetValue(day, out int count) && count > 0;
                     bool isWeekend = col >= 5;
 
-                    cell.SetDate(day, isToday, isSelected, isWeekend, hasEvents, Math.Min(count, 3));
+                    cell.SetDate(CurrentMonth.Year, CurrentMonth.Month, day, isToday, isSelected, isWeekend, hasEvents, Math.Min(count, 3));
                     day++;
                 }
             }
@@ -177,9 +177,9 @@ public class DayCell : Border
         Background = Transparent;
     }
 
-    public void SetDate(int day, bool isToday, bool isSelected, bool isWeekend, bool hasEvents, int dotCount)
+    public void SetDate(int year, int month, int day, bool isToday, bool isSelected, bool isWeekend, bool hasEvents, int dotCount)
     {
-        Date = new DateTime(DateTime.Today.Year, DateTime.Today.Month, day);
+        Date = new DateTime(year, month, day);
         _dayText.Text = day.ToString();
         _dotsPanel.Children.Clear();
 
