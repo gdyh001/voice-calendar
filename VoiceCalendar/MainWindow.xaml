@@ -1,4 +1,4 @@
-﻿<Window x:Class="VoiceCalendar.MainWindow"
+<Window x:Class="VoiceCalendar.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:VoiceCalendar.Controls"
@@ -78,9 +78,11 @@
             <Border Grid.Column="2" Background="White" CornerRadius="0,0,12,12">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
                     <!-- 新建日程表单 -->
                     <ScrollViewer x:Name="FormPanel" Grid.Row="0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
@@ -199,8 +201,14 @@
 
                                         </Grid>
 
+                    <!-- 实时识别文字 -->
+                    <TextBlock Grid.Row="1" x:Name="TxtLiveText"
+                               Text="..." FontSize="14" Foreground="#8E8E93"
+                               Padding="12,8,12,4" Visibility="Collapsed"
+                               TextWrapping="Wrap"/>
+
                     <!-- 底部双按钮 -->
-                    <Border Grid.Row="1" Background="White" Padding="12,8,12,12"
+                    <Border Grid.Row="2" Background="White" Padding="12,8,12,12"
                             BorderBrush="#E5E5EA" BorderThickness="0,1,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -218,7 +226,7 @@
                                             <StackPanel Orientation="Horizontal"
                                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock Text="🎤" FontSize="16" Margin="0,0,6,0"/>
-                                                <TextBlock Text="语音" FontSize="13" Foreground="#007AFF" FontWeight="SemiBold"/>
+                                                <TextBlock Text="语音添加" FontSize="13" Foreground="#007AFF" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
                                     </ControlTemplate>
@@ -234,7 +242,7 @@
                                             <StackPanel Orientation="Horizontal"
                                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock Text="⏺" FontSize="14" Foreground="White" Margin="0,0,6,0"/>
-                                                <TextBlock Text="录音中" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
+                                                <TextBlock Text="点击暂停" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
                                     </ControlTemplate>
