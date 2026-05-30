@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -17,6 +17,7 @@ public class VoiceService
     private readonly string _modelPath;
 
     public bool IsListening { get; private set; }
+    public event Action<string>? PartialResultChanged;
 
     public VoiceService(string modelPath)
     {
@@ -39,7 +40,7 @@ public class VoiceService
     {
         if (_model == null && !Initialize())
             throw new InvalidOperationException(
-                $"模型目录不存在: {_modelPath}`n请从 https://alphacephei.com/vosk/models 下载 vosk-model-small-cn-0.22`n解压到 VoiceCalendar/model/ 目录");
+                $"模型目录不存在: {_modelPath}`n请从 https://alphacephei.com/vosk/models 下载 vosk-model-cn-0.22`n解压到 VoiceCalendar/model/ 目录");
 
         IsListening = true;
         _accumulatedText = "";
@@ -66,12 +67,7 @@ public class VoiceService
 
         lock (_lock)
         {
-            try
-            {
-                _waveIn?.StopRecording();
-                _waveIn?.Dispose();
-            }
-            catch { }
+            try { _waveIn?.StopRecording(); _waveIn?.Dispose(); } catch { }
             _waveIn = null;
 
             if (_recognizer != null)
@@ -107,7 +103,24 @@ public class VoiceService
                 if (!string.IsNullOrEmpty(text))
                     _accumulatedText += text;
             }
+
+            var partialJson = _recognizer.PartialResult();
+            var partialText = ParsePartial(partialJson);
+            if (!string.IsNullOrEmpty(partialText))
+                PartialResultChanged?.Invoke(partialText);
         }
+    }
+
+    private static string ParsePartial(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var text = doc.RootElement.GetProperty("partial").GetString();
+            return text ?? "";
+        }
+        catch { return ""; }
     }
 
     private static string ParseText(string json)

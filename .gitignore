@@ -1,4 +1,4 @@
-﻿# .NET / C#
+# .NET / C#
 bin/
 obj/
 *.user
@@ -25,4 +25,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 # Vosk speech model (download separately)
-VoiceCalendar/model/vosk-model-small-cn-0.22/
+VoiceCalendar/model/vosk-model-cn-0.22/

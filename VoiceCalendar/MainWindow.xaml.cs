@@ -12,9 +12,10 @@ namespace VoiceCalendar;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
+    private readonly NlpParserService _nlp = new();
     private static string FindModelPath()
     {
-        var modelDir = Path.Combine("model", "vosk-model-small-cn-0.22");
+        var modelDir = Path.Combine("model", "vosk-model-cn-0.22");
         var candidates = new[] {
             Directory.GetCurrentDirectory(),
             AppDomain.CurrentDomain.BaseDirectory,
@@ -25,7 +26,7 @@ public partial class MainWindow : Window
             var full = Path.GetFullPath(Path.Combine(basePath, modelDir));
             if (Directory.Exists(full)) return full;
         }
-        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), modelDir));
+        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "model", "vosk-model-cn-0.22"));
     }
 
     private readonly VoiceService _voiceService = new(FindModelPath());
@@ -37,6 +38,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _vm;
 
+
+        _voiceService.PartialResultChanged += (text) => Dispatcher.Invoke(() => TxtLiveText.Text = text);
         // 加载 Vosk 语音模型
         if (!_voiceService.Initialize())
         {
@@ -158,6 +161,8 @@ public partial class MainWindow : Window
     {
         BtnVoiceIdle.Visibility = Visibility.Collapsed;
         BtnVoiceRecording.Visibility = Visibility.Visible;;
+        TxtLiveText.Visibility = Visibility.Visible;
+        TxtLiveText.Text = "";
 
         _recordTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -179,6 +184,7 @@ public partial class MainWindow : Window
             _recordTimer.Stop();
             BtnVoiceIdle.Visibility = Visibility.Visible;
             BtnVoiceRecording.Visibility = Visibility.Collapsed;
+        TxtLiveText.Visibility = Visibility.Collapsed;
             MessageBox.Show(ex.Message, "模型未找到");
         }
         catch (UnauthorizedAccessException)
@@ -207,10 +213,51 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrEmpty(text) && !text.StartsWith("["))
         {
-            _vm.ProcessVoiceCommand(text);
-            CalendarView.Refresh();
-            PopulateSchedule(_scheduleDate);
+            AutoFillForm(text);
         }
+    }
+
+    private void AutoFillForm(string text)
+    {
+        var parsed = _nlp.Parse(text);
+        var today = DateTime.Today;
+
+        TxtEventTitle.Text = parsed.Title;
+        DpStartDate.SelectedDate = parsed.Date ?? today;
+        DpEndDate.SelectedDate = parsed.Date ?? today;
+
+        if (parsed.Hour.HasValue)
+        {
+            SetComboBox(CmbStartHour, parsed.Hour.Value);
+            SetComboBox(CmbStartMin, parsed.Minute ?? 0);
+        }
+        else
+        {
+            CmbStartHour.SelectedIndex = 0;
+            CmbStartMin.SelectedIndex = 0;
+        }
+        CmbEndHour.SelectedIndex = 0;
+        CmbEndMin.SelectedIndex = 0;
+
+        SchedulePanel.Visibility = Visibility.Collapsed;
+        FormPanel.Visibility = Visibility.Visible;
+        BtnNewFromSchedule.Visibility = Visibility.Collapsed;
+        FormButtons.Visibility = Visibility.Visible;
+
+        _vm.StatusText = $"语音识别: {text}";
+    }
+
+    private static void SetComboBox(ComboBox cb, int value)
+    {
+        foreach (ComboBoxItem item in cb.Items)
+        {
+            if (item.Content?.ToString() == value.ToString("D2"))
+            {
+                item.IsSelected = true;
+                return;
+            }
+        }
+        cb.SelectedIndex = 0;
     }
 
     // === 右键 ===

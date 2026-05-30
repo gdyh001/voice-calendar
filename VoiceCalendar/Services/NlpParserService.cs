@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -43,6 +43,8 @@ public class NlpParserService
         public string Action { get; set; } = "add";
         public DateTime? Date { get; set; }
         public string? Time { get; set; }
+        public int? Hour { get; set; }
+        public int? Minute { get; set; }
         public string Title { get; set; } = "";
         public string Raw { get; set; } = "";
     }
@@ -55,6 +57,13 @@ public class NlpParserService
         result.Action = ParseAction(text);
         result.Date = ParseDate(text, today);
         result.Time = ParseTime(text);
+
+        // 拆分 Hour / Minute 方便表单回填
+        if (!string.IsNullOrEmpty(result.Time) && result.Time.Length == 5)
+        {
+            if (int.TryParse(result.Time.Substring(0, 2), out int h)) result.Hour = h;
+            if (int.TryParse(result.Time.Substring(3, 2), out int m)) result.Minute = m;
+        }
         result.Title = ExtractTitle(text);
 
         return result;
@@ -108,7 +117,34 @@ public class NlpParserService
             }
         }
 
-        // 4. X月X日 / X月X号
+
+        // 4a. 中文月+数字日：六月2日/五月31号
+        var cnMonthDigitDay = Regex.Match(text, @"([一二三四五六七八九十两]{1,3})\s*月\s*(\d{1,2})\s*[日号]");
+        if (cnMonthDigitDay.Success)
+        {
+            var cm = ParseChineseNumber(cnMonthDigitDay.Groups[1].Value);
+            int cd = int.Parse(cnMonthDigitDay.Groups[2].Value);
+            if (cm >= 1 && cm <= 12 && cd >= 1 && cd <= 31)
+            {
+                try { var parsed = new DateTime(t.Year, cm.Value, cd); if (parsed < t) parsed = new DateTime(t.Year + 1, cm.Value, cd); return parsed; }
+                catch { return null; }
+            }
+        }
+
+        // 4b. 中文月+中文日：六月二日/五月三十一号
+        var cnMonthCnDay = Regex.Match(text, @"([一二三四五六七八九十两]{1,3})\s*月\s*([一二三四五六七八九十两]{1,4})\s*[日号]");
+        if (cnMonthCnDay.Success)
+        {
+            var cm2 = ParseChineseNumber(cnMonthCnDay.Groups[1].Value);
+            var cd2 = ParseChineseNumber(cnMonthCnDay.Groups[2].Value);
+            if (cm2 >= 1 && cm2 <= 12 && cd2 >= 1 && cd2 <= 31)
+            {
+                try { var parsed = new DateTime(t.Year, cm2.Value, cd2.Value); if (parsed < t) parsed = new DateTime(t.Year + 1, cm2.Value, cd2.Value); return parsed; }
+                catch { return null; }
+            }
+        }
+
+        // 4c. X月X日 / X月X号（阿拉伯数字）
         var md = Regex.Match(text, @"(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]");
         if (md.Success)
         {
@@ -261,13 +297,22 @@ public class NlpParserService
         foreach (var kw in DateKeywords.Keys) title = title.Replace(kw, "");
         foreach (var kw in WeekdayNames.Keys) title = title.Replace(kw, "");
 
-        // 去掉 X月X日/X号
+        // 去掉中文月+阿拉伯日：六月2日/五月31号
+        title = Regex.Replace(title, @"[一二三四五六七八九十两]{1,3}\s*月\s*\d{1,2}\s*[日号]", "");
+
+        // 去掉中文月+中文日：六月二日/五月三十一号
+        title = Regex.Replace(title, @"[一二三四五六七八九十两]{1,3}\s*月\s*[一二三四五六七八九十两]{1,4}\s*[日号]", "");
+
+        // 去掉 X月X日/X号（阿拉伯数字）
         title = Regex.Replace(title, @"\d{1,2}\s*月\s*\d{1,2}\s*[日号]", "");
 
         // 去掉裸 X号/X日（阿拉伯）
         title = Regex.Replace(title, @"\d{1,2}\s*[日号]", "");
 
         // 去掉裸中文数字 X号/X日（如"二十三号"）
+
+        // 去掉孤立的中文月份（如"六月"）
+        title = Regex.Replace(title, @"[一二三四五六七八九十两]{1,3}\s*月", "");
         title = Regex.Replace(title, @"[一二三四五六七八九十两]{1,4}\s*[日号]", "");
 
         // 去掉 HH:MM
