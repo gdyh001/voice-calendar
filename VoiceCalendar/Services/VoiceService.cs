@@ -1,17 +1,17 @@
 ﻿using System;
-using System.Speech.Recognition;
 using System.Threading.Tasks;
+using Windows.Media.SpeechRecognition;
 
 namespace VoiceCalendar.Services;
 
 public class VoiceService
 {
-    private SpeechRecognitionEngine? _engine;
+    private SpeechRecognizer? _recognizer;
     private TaskCompletionSource<string>? _tcs;
 
     public bool IsListening { get; private set; }
 
-    public async Task<string> ListenAsync(int timeoutMs = 5000)
+    public async Task<string> ListenAsync(int timeoutMs = 8000)
     {
         if (IsListening) return "[正在聆听中...]";
 
@@ -20,68 +20,59 @@ public class VoiceService
 
         try
         {
-            _engine = new SpeechRecognitionEngine();
+            _recognizer = new SpeechRecognizer(
+                new Windows.Globalization.Language("zh-CN"));
 
-            // 尝试加载中文听写引擎
-            try
-            {
-                _engine.SetInputToDefaultAudioDevice();
-                _engine.LoadGrammar(new DictationGrammar());
-            }
-            catch (Exception ex)
-            {
-                return $"[语音引擎初始化失败: {ex.Message}。请确保已安装中文语音包(设置→时间和语言→语音→添加语言→中文)]";
-            }
+            await _recognizer.CompileConstraintsAsync();
 
-            _engine.SpeechRecognized += OnSpeechRecognized;
-            _engine.SpeechHypothesized += OnSpeechHypothesized;
-            _engine.RecognizeCompleted += (_, _) =>
+            _recognizer.ContinuousRecognitionSession.ResultGenerated += (_, args) =>
             {
-                if (!_tcs.Task.IsCompleted)
-                    _tcs.TrySetResult("");
+                var text = args.Result.Text?.Trim();
+                if (!string.IsNullOrEmpty(text) && !_tcs.Task.IsCompleted)
+                    _tcs.TrySetResult(text);
             };
 
-            _engine.RecognizeAsync(RecognizeMode.Single);
+            _recognizer.ContinuousRecognitionSession.Completed += (_, _) =>
+            {
+                if (!_tcs.Task.IsCompleted)
+                    _tcs.TrySetResult("[识别结束]");
+            };
 
-            // 超时控制
+            await _recognizer.ContinuousRecognitionSession.StartAsync(
+                SpeechContinuousRecognitionMode.Default);
+
             var timeout = Task.Delay(timeoutMs);
             var completed = await Task.WhenAny(_tcs.Task, timeout);
 
             if (completed == timeout)
             {
-                _engine.RecognizeAsyncCancel();
-                return "[未检测到语音，请重试]";
+                try { await _recognizer.ContinuousRecognitionSession.StopAsync(); } catch { }
+                return "[超时：未检测到语音]";
             }
 
             return await _tcs.Task;
         }
+        catch (UnauthorizedAccessException)
+        {
+            return "[请开启麦克风权限：设置→隐私→麦克风]";
+        }
+        catch (Exception ex) when (ex.HResult == -2147024809 ||
+                                    ex.Message.Contains("privacy"))
+        {
+            return "[请开启语音识别：设置→隐私→语音→打开\"在线语音识别\"]";
+        }
         catch (Exception ex)
         {
-            return $"[错误: {ex.Message}]";
+            return "[语音引擎: " + ex.Message + "]";
         }
         finally
         {
             IsListening = false;
-            if (_engine != null)
+            if (_recognizer != null)
             {
-                _engine.SpeechRecognized -= OnSpeechRecognized;
-                _engine.SpeechHypothesized -= OnSpeechHypothesized;
-                try { _engine.Dispose(); } catch { }
-                _engine = null;
+                try { _recognizer.Dispose(); } catch { }
+                _recognizer = null;
             }
         }
-    }
-
-    private void OnSpeechRecognized(object? sender, SpeechRecognizedEventArgs e)
-    {
-        if (e.Result != null && e.Result.Confidence > 0.3)
-        {
-            _tcs?.TrySetResult(e.Result.Text);
-        }
-    }
-
-    private void OnSpeechHypothesized(object? sender, SpeechHypothesizedEventArgs e)
-    {
-        // 可用于显示实时识别进度
     }
 }

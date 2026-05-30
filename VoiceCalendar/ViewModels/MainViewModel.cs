@@ -13,7 +13,6 @@ namespace VoiceCalendar.ViewModels;
 public class MainViewModel : INotifyPropertyChanged
 {
     private readonly EventStorageService _storage = new();
-    private readonly VoiceService _voice = new();
     private readonly NlpParserService _nlp = new();
     private readonly ReminderService _reminder;
 
@@ -57,45 +56,9 @@ public class MainViewModel : INotifyPropertyChanged
 
     public string VoiceButtonText => IsListening ? "正在聆听..." : "🎤 语音输入";
 
-    // === 命令 ===
+    // === 语音命令处理（由 MainWindow 调用）===
 
-    public void RefreshEvents()
-    {
-        var list = _storage.GetEventsByDate(SelectedDate);
-        Events = new ObservableCollection<CalendarEvent>(list);
-        StatusText = list.Count > 0
-            ? $"{SelectedDate:yyyy年MM月dd日} - {list.Count}个事件"
-            : $"{SelectedDate:yyyy年MM月dd日} - 暂无事件";
-    }
-
-    public async Task VoiceInputAsync()
-    {
-        if (IsListening) return;
-        IsListening = true;
-        StatusText = "正在聆听，请说话...";
-
-        try
-        {
-            var text = await _voice.ListenAsync(5000);
-            StatusText = text.StartsWith("[") ? text : $"识别结果: {text}";
-            await Task.Delay(100);
-
-            if (!text.StartsWith("["))
-            {
-                ProcessCommand(text);
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"错误: {ex.Message}";
-        }
-        finally
-        {
-            IsListening = false;
-        }
-    }
-
-    private void ProcessCommand(string text)
+    public void ProcessVoiceCommand(string text)
     {
         var parsed = _nlp.Parse(text);
         var today = DateTime.Today;
@@ -132,6 +95,17 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    // === 事件操作 ===
+
+    public void RefreshEvents()
+    {
+        var list = _storage.GetEventsByDate(SelectedDate);
+        Events = new ObservableCollection<CalendarEvent>(list);
+        StatusText = list.Count > 0
+            ? $"{SelectedDate:yyyy年MM月dd日} - {list.Count}个事件"
+            : $"{SelectedDate:yyyy年MM月dd日} - 暂无事件";
+    }
+
     public CalendarEvent AddEventManually(string title, DateTime date, string? time)
     {
         var ev = _storage.AddEvent(title, date, time);
@@ -153,12 +127,6 @@ public class MainViewModel : INotifyPropertyChanged
         if (ev != null && date.Date == SelectedDate.Date) RefreshEvents();
         StatusText = ev != null ? $"已更新: {title}" : "更新失败";
         return ev;
-    }
-
-    public CalendarEvent? GetEvent(string id)
-    {
-        return _storage.GetEventsByDate(SelectedDate)
-            .Find(e => e.Id == id);
     }
 
     private void OnReminderTriggered(CalendarEvent ev)
