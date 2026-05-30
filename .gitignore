@@ -24,3 +24,5 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+# Vosk speech model (download separately)
+VoiceCalendar/model/vosk-model-small-cn-0.22/
