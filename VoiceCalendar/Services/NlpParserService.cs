@@ -30,7 +30,10 @@ public class NlpParserService
         {"十五", 15}, {"十六", 16}, {"十七", 17}, {"十八", 18}, {"十九", 19},
         {"二十", 20}, {"二十一", 21}, {"二十二", 22}, {"二十三", 23},
         {"二十四", 24}, {"二十五", 25}, {"二十六", 26}, {"二十七", 27},
-        {"二十八", 28}, {"二十九", 29}, {"三十", 30}, {"三十一", 31},
+        {"三十一", 31}, {"四十", 40}, {"四十一", 41}, {"四十二", 42}, {"四十三", 43},
+        {"四十四", 44}, {"四十五", 45}, {"四十六", 46}, {"四十七", 47}, {"四十八", 48}, {"四十九", 49},
+        {"五十", 50}, {"五十一", 51}, {"五十二", 52}, {"五十三", 53}, {"五十四", 54}, {"五十五", 55},
+        {"五十六", 56}, {"五十七", 57}, {"五十八", 58}, {"五十九", 59},
         {"两", 2}, {"零", 0},
     };
 
@@ -45,6 +48,9 @@ public class NlpParserService
         public string? Time { get; set; }
         public int? Hour { get; set; }
         public int? Minute { get; set; }
+        public string? EndTime { get; set; }
+        public int? EndHour { get; set; }
+        public int? EndMinute { get; set; }
         public string Title { get; set; } = "";
         public string Raw { get; set; } = "";
     }
@@ -56,13 +62,18 @@ public class NlpParserService
 
         result.Action = ParseAction(text);
         result.Date = ParseDate(text, today);
-        result.Time = ParseTime(text);
-
-        // 拆分 Hour / Minute 方便表单回填
+        var (startTime, endTime) = ParseTimeRange(text);
+        result.Time = startTime;
+        result.EndTime = endTime;
         if (!string.IsNullOrEmpty(result.Time) && result.Time.Length == 5)
         {
             if (int.TryParse(result.Time.Substring(0, 2), out int h)) result.Hour = h;
             if (int.TryParse(result.Time.Substring(3, 2), out int m)) result.Minute = m;
+        }
+        if (!string.IsNullOrEmpty(result.EndTime) && result.EndTime.Length == 5)
+        {
+            if (int.TryParse(result.EndTime.Substring(0, 2), out int eh)) result.EndHour = eh;
+            if (int.TryParse(result.EndTime.Substring(3, 2), out int em)) result.EndMinute = em;
         }
         result.Title = ExtractTitle(text);
 
@@ -210,7 +221,7 @@ public class NlpParserService
             return val;
 
         // 动态组合：二十X / 三十X
-        if ((text.StartsWith("二十") || text.StartsWith("三十")) && text.Length == 3)
+        if ((text.StartsWith("二十") || text.StartsWith("三十") || text.StartsWith("四十") || text.StartsWith("五十")) && text.Length == 3)
         {
             var prefix = text.Substring(0, 2);
             var suffix = text.Substring(2, 1);
@@ -224,6 +235,43 @@ public class NlpParserService
     }
 
     // ================================================================
+
+    // ================================================================
+    //  ParseTimeRange — 解析时间段（支持"早上7点到晚上五点"）
+    // ================================================================
+    public static (string? Start, string? End) ParseTimeRange(string text)
+    {
+        // 查找 "到" 或 "至" 分隔符
+        var rangeMatch = Regex.Match(text, @"(.+?)[到至](.+)");
+        if (!rangeMatch.Success)
+            return (ParseTime(text), null);
+
+        var before = rangeMatch.Groups[1].Value;
+        var after = rangeMatch.Groups[2].Value;
+
+        var start = ParseTime(before);
+        var end = ParseTime(after);
+
+        // 如果后半段没有时段词，继承前半段的下午/晚上语境
+        if (end != null)
+        {
+            bool beforePm = before.Contains("下午") || before.Contains("晚上");
+            bool beforeAm = before.Contains("上午") || before.Contains("凌晨") || before.Contains("早上");
+            bool afterPm = after.Contains("下午") || after.Contains("晚上");
+            bool afterAm = after.Contains("上午") || after.Contains("凌晨") || after.Contains("早上");
+
+            if (!afterPm && !afterAm && beforePm)
+            {
+                // 继承下午语境："下午两点到三点" → 14:00-15:00
+                int eh = int.Parse(end.Substring(0, 2));
+                if (eh < 12) eh += 12;
+                end = $"{eh:D2}:{end.Substring(3, 2)}";
+            }
+        }
+
+        return (start, end);
+    }
+
     //  ParseTime — 时间解析
     // ================================================================
     public static string? ParseTime(string text)
@@ -240,7 +288,7 @@ public class NlpParserService
 
         // X点 / X点半 / X点X分 / X点一刻（含中文数字）
         var timeMatch = Regex.Match(text,
-            @"(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*点(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*分)?)|(一刻)?)");
+            @"(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*点(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*分?)?)|(一刻)?)");
 
         if (!timeMatch.Success) return null;
 
@@ -319,11 +367,14 @@ public class NlpParserService
         title = Regex.Replace(title, @"\d{1,2}\s*[:：]\s*\d{2}", "");
 
         // 去掉 X点/X点半/X点X分（阿拉伯+中文数字）
-        title = Regex.Replace(title, @"(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*点\s*(半|一刻|(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*分)?", "");
+        title = Regex.Replace(title, @"(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*点\s*(半|一刻|(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*分?)?", "");
 
         // 去掉时段词
         title = Regex.Replace(title, @"(上午|下午|晚上|中午|凌晨|早上|早晨|清晨)", "");
         title = title.Replace("下周", "");
+        title = title.Replace("到", "");
+        title = title.Replace("至", "");
+        title = title.Replace("-", "");
 
         // 去掉标点
         title = Regex.Replace(title, @"[，,。.!！?？;；、]", "");
