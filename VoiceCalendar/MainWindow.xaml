@@ -3,94 +3,296 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:VoiceCalendar.Controls"
         xmlns:converters="clr-namespace:VoiceCalendar.Converters"
-        Title="语音日历工具"
-        Width="900" Height="680"
-        MinWidth="780" MinHeight="560"
+        Title="G Day" Width="960" Height="700"
+        MinWidth="800" MinHeight="580"
         Background="#F2F2F7"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Segoe UI">
+        FontFamily="Segoe UI"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip">
+
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="WinBtn" TargetType="Button">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="0">
+                            <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
-    <Grid Margin="0">
+
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" Background="White" Padding="16,12" BorderBrush="#E5E5EA" BorderThickness="0,0,0,1">
+
+        <!-- ===== 标题栏 ===== -->
+        <Border Grid.Row="0" Height="44" Background="#007AFF" CornerRadius="12,12,0,0" MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <Button x:Name="BtnPrevMonth" Content="◀" Style="{StaticResource IosNavButton}" FontSize="14" Click="BtnPrevMonth_Click"/>
-                    <TextBlock x:Name="TxtMonthTitle" Text="2026年5月" FontSize="22" FontWeight="Bold" Foreground="{StaticResource IosDarkText}" VerticalAlignment="Center" Margin="8,0"/>
-                    <Button x:Name="BtnNextMonth" Content="▶" Style="{StaticResource IosNavButton}" FontSize="14" Click="BtnNextMonth_Click"/>
+                <TextBlock Grid.Column="0" Text="G Day" FontSize="16" FontWeight="Bold"
+                           Foreground="White" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Content="—" Style="{StaticResource WinBtn}" Click="BtnMinimize_Click"/>
+                    <Button x:Name="BtnMaximize" Content="□" Style="{StaticResource WinBtn}" Click="BtnMaximize_Click"/>
+                    <Button Content="✕" Style="{StaticResource WinBtn}" Click="BtnClose_Click"/>
                 </StackPanel>
-                <Button Grid.Column="2" Content="今天" Style="{StaticResource IosNavButton}" FontSize="15" Click="BtnToday_Click" Margin="0,0,12,0"/>
-                <Button Grid.Column="3" x:Name="BtnVoice" Content="🎤 语音输入" Style="{StaticResource IosPrimaryButton}" Click="BtnVoice_Click" FontSize="14"/>
             </Grid>
         </Border>
-        <Grid Grid.Row="1" Margin="12,8">
+
+        <!-- ===== 主体 ===== -->
+        <Grid Grid.Row="1" Margin="12,4,12,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="340"/>
+                <ColumnDefinition Width="*" MinWidth="380"/>
                 <ColumnDefinition Width="4"/>
-                <ColumnDefinition Width="280" MinWidth="240"/>
+                <ColumnDefinition Width="280" MinWidth="260"/>
             </Grid.ColumnDefinitions>
-            <Border Grid.Column="0" Background="White" CornerRadius="12" Padding="4">
+
+            <!-- 日历 -->
+            <Border Grid.Column="0" Background="White" CornerRadius="0,0,0,12" Padding="4">
                 <controls:CalendarView x:Name="CalendarView"/>
             </Border>
+
             <GridSplitter Grid.Column="1" Width="4" Background="Transparent"/>
-            <Border Grid.Column="2" Background="White" CornerRadius="12" Padding="16">
+
+            <!-- 右侧面板：日程视图 -->
+            <Border Grid.Column="2" Background="White" CornerRadius="0,0,12,12">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                        <TextBlock x:Name="TxtSelectedDate" Text="5月30日" FontSize="22" FontWeight="Bold" Foreground="{StaticResource IosDarkText}"/>
-                        <TextBlock x:Name="TxtSelectedWeekday" Text="周六" FontSize="14" Foreground="{StaticResource IosGrayText}"/>
-                    </StackPanel>
-                    <Border Grid.Row="1" Height="1" Background="#E5E5EA" Margin="0,0,0,8"/>
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="EventList" Margin="0,0,0,8">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#F8F8FB" CornerRadius="8" Padding="10,8" Margin="0,0,0,6">
-                                        <Border.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="编辑" Click="MenuItemEdit_Click"/>
-                                                <MenuItem Header="删除" Click="MenuItemDelete_Click"/>
-                                            </ContextMenu>
-                                        </Border.ContextMenu>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Width="3" CornerRadius="2" Background="#007AFF" VerticalAlignment="Stretch" Margin="0,0,8,0"/>
-                                            <StackPanel Grid.Column="1">
-                                                <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" Foreground="#1C1C1E" TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding TimeDisplay}" FontSize="12" Foreground="#8E8E93" Margin="0,2,0,0"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+
+                    <!-- 新建日程表单 -->
+                    <ScrollViewer x:Name="FormPanel" Grid.Row="0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="16">
+                            <TextBlock Text="新建日程" FontSize="18" FontWeight="Bold"
+                                       Foreground="#1C1C1E" Margin="0,0,0,16"/>
+
+                            <TextBlock Text="日程名称" FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93" Margin="0,0,0,4"/>
+                            <TextBox x:Name="TxtEventTitle" FontSize="14" Padding="10,8"
+                                     BorderBrush="#E5E5EA" BorderThickness="1" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="日程备注" FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93" Margin="0,0,0,4"/>
+                            <TextBox x:Name="TxtEventNote" FontSize="14" Padding="10,8"
+                                     BorderBrush="#E5E5EA" BorderThickness="1" TextWrapping="Wrap"
+                                     AcceptsReturn="True" Height="56" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="日期" FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93" Margin="0,0,0,4"/>
+                            <DatePicker x:Name="DpStartDate" FontSize="13" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="时间（留空=全天）" FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/><ColumnDefinition Width="10"/><ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="CmbStartHour" FontSize="13">
+                                    <ComboBoxItem/><ComboBoxItem>00</ComboBoxItem><ComboBoxItem>01</ComboBoxItem><ComboBoxItem>02</ComboBoxItem><ComboBoxItem>03</ComboBoxItem>
+                                    <ComboBoxItem>04</ComboBoxItem><ComboBoxItem>05</ComboBoxItem><ComboBoxItem>06</ComboBoxItem><ComboBoxItem>07</ComboBoxItem>
+                                    <ComboBoxItem>08</ComboBoxItem><ComboBoxItem>09</ComboBoxItem><ComboBoxItem>10</ComboBoxItem><ComboBoxItem>11</ComboBoxItem>
+                                    <ComboBoxItem>12</ComboBoxItem><ComboBoxItem>13</ComboBoxItem><ComboBoxItem>14</ComboBoxItem><ComboBoxItem>15</ComboBoxItem>
+                                    <ComboBoxItem>16</ComboBoxItem><ComboBoxItem>17</ComboBoxItem><ComboBoxItem>18</ComboBoxItem><ComboBoxItem>19</ComboBoxItem>
+                                    <ComboBoxItem>20</ComboBoxItem><ComboBoxItem>21</ComboBoxItem><ComboBoxItem>22</ComboBoxItem><ComboBoxItem>23</ComboBoxItem>
+                                </ComboBox>
+                                <TextBlock Grid.Column="1" Text=":" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <ComboBox x:Name="CmbStartMin" Grid.Column="2" FontSize="13">
+                                    <ComboBoxItem/><ComboBoxItem>00</ComboBoxItem><ComboBoxItem>15</ComboBoxItem><ComboBoxItem>30</ComboBoxItem><ComboBoxItem>45</ComboBoxItem>
+                                </ComboBox>
+                            </Grid>
+
+                            <TextBlock Text="结束日期" FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93" Margin="0,0,0,4"/>
+                            <DatePicker x:Name="DpEndDate" FontSize="13" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="结束时间（留空=全天）" FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/><ColumnDefinition Width="10"/><ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="CmbEndHour" FontSize="13">
+                                    <ComboBoxItem/><ComboBoxItem>00</ComboBoxItem><ComboBoxItem>01</ComboBoxItem><ComboBoxItem>02</ComboBoxItem><ComboBoxItem>03</ComboBoxItem>
+                                    <ComboBoxItem>04</ComboBoxItem><ComboBoxItem>05</ComboBoxItem><ComboBoxItem>06</ComboBoxItem><ComboBoxItem>07</ComboBoxItem>
+                                    <ComboBoxItem>08</ComboBoxItem><ComboBoxItem>09</ComboBoxItem><ComboBoxItem>10</ComboBoxItem><ComboBoxItem>11</ComboBoxItem>
+                                    <ComboBoxItem>12</ComboBoxItem><ComboBoxItem>13</ComboBoxItem><ComboBoxItem>14</ComboBoxItem><ComboBoxItem>15</ComboBoxItem>
+                                    <ComboBoxItem>16</ComboBoxItem><ComboBoxItem>17</ComboBoxItem><ComboBoxItem>18</ComboBoxItem><ComboBoxItem>19</ComboBoxItem>
+                                    <ComboBoxItem>20</ComboBoxItem><ComboBoxItem>21</ComboBoxItem><ComboBoxItem>22</ComboBoxItem><ComboBoxItem>23</ComboBoxItem>
+                                </ComboBox>
+                                <TextBlock Grid.Column="1" Text=":" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <ComboBox x:Name="CmbEndMin" Grid.Column="2" FontSize="13">
+                                    <ComboBoxItem/><ComboBoxItem>00</ComboBoxItem><ComboBoxItem>15</ComboBoxItem><ComboBoxItem>30</ComboBoxItem><ComboBoxItem>45</ComboBoxItem>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
                     </ScrollViewer>
-                    <Button Grid.Row="3" Content="+ 添加事件" Style="{StaticResource IosPrimaryButton}" Click="BtnAddEvent_Click" HorizontalAlignment="Stretch"/>
+
+                    <!-- 日程区域 -->
+                    <Grid x:Name="SchedulePanel" Grid.Row="0"><!-- 日期标题 + 日程列表 -->
+                    <Grid Grid.Row="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Background="#F8F8FB" CornerRadius="10" Padding="12,16" Margin="12,12,12,8">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtScheduleDate" Text="5月30日" FontSize="20" FontWeight="Bold"
+                                           Foreground="#1C1C1E" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtScheduleWeekday" Text="周六" FontSize="13"
+                                           Foreground="#8E8E93" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="12,0,12,0">
+                            <Grid>
+                                <TextBlock x:Name="TxtEmptySchedule" Text="暂无日程" FontSize="14"
+                                           Foreground="#8E8E93" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" Visibility="Visible"/>
+                                <ItemsControl x:Name="ScheduleList" Visibility="Collapsed">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#F8F8FB" CornerRadius="10" Padding="12,10" Margin="0,0,0,8">
+                                                <Border.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="编辑" Click="MenuItemEdit_Click"/>
+                                                        <MenuItem Header="删除" Click="MenuItemDelete_Click"/>
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Width="3" CornerRadius="2"
+                                                            Background="#007AFF" VerticalAlignment="Stretch" Margin="0,0,10,0"/>
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="{Binding TimeDisplay}" FontSize="13"
+                                                                   Foreground="#007AFF" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{Binding Title}" FontSize="14"
+                                                                   Foreground="#1C1C1E" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </ScrollViewer>
+                    </Grid>
+
+                                        </Grid>
+
+                    <!-- 底部双按钮 -->
+                    <Border Grid.Row="1" Background="White" Padding="12,8,12,12"
+                            BorderBrush="#E5E5EA" BorderThickness="0,1,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button Grid.Column="0" x:Name="BtnVoiceIdle"
+                                    Click="BtnVoice_Click" Height="40" Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="#F0F6FF" CornerRadius="10"
+                                                BorderBrush="#007AFF" BorderThickness="1">
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="🎤" FontSize="16" Margin="0,0,6,0"/>
+                                                <TextBlock Text="语音" FontSize="13" Foreground="#007AFF" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <Button Grid.Column="0" x:Name="BtnVoiceRecording"
+                                    Click="BtnVoice_Click" Height="40" Cursor="Hand"
+                                    Visibility="Collapsed">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="#007AFF" CornerRadius="10">
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="⏺" FontSize="14" Foreground="White" Margin="0,0,6,0"/>
+                                                <TextBlock Text="录音中" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <!-- 日程模式：+新建 -->
+                            <Button Grid.Column="2" x:Name="BtnNewFromSchedule"
+                                    Click="BtnNewFromSchedule_Click" Height="40" Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="#007AFF" CornerRadius="10">
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="+" FontSize="18" Foreground="White" Margin="0,0,6,0"/>
+                                                <TextBlock Text="新建" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <!-- 表单模式：取消 + 保存 -->
+                            <Grid Grid.Column="2" x:Name="FormButtons" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" x:Name="BtnCancelForm"
+                                        Click="BtnCancelForm_Click" Height="40" Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="#F2F2F7" CornerRadius="10">
+                                                <TextBlock Text="取消" FontSize="13" Foreground="#8E8E93"
+                                                           FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Grid.Column="2" x:Name="BtnSaveForm"
+                                        Click="BtnSaveForm_Click" Height="40" Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="#007AFF" CornerRadius="10">
+                                                <TextBlock Text="保存" FontSize="13" Foreground="White"
+                                                           FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>
-        <Border Grid.Row="2" Background="White" BorderBrush="#E5E5EA" BorderThickness="0,1,0,0" Padding="16,8">
-            <TextBlock x:Name="TxtStatus" Text="就绪" FontSize="12" Foreground="{StaticResource IosGrayText}"/>
-        </Border>
+
+        <Border Grid.RowSpan="2" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" IsHitTestVisible="False"/>
     </Grid>
 </Window>
