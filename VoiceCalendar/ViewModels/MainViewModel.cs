@@ -129,6 +129,12 @@ public class MainViewModel : INotifyPropertyChanged
         return ev;
     }
 
+    
+
+    public System.Collections.Generic.List<CalendarEvent> GetEventsForDate(DateTime date)
+    {
+        return _storage.GetEventsByDate(date);
+    }
     private void OnReminderTriggered(CalendarEvent ev)
     {
         Application.Current.Dispatcher.Invoke(() =>

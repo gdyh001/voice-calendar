@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,7 +12,23 @@ namespace VoiceCalendar;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
-    private readonly VoiceService _voiceService = new();
+    private static string FindModelPath()
+    {
+        var modelDir = Path.Combine("model", "vosk-model-small-cn-0.22");
+        var candidates = new[] {
+            Directory.GetCurrentDirectory(),
+            AppDomain.CurrentDomain.BaseDirectory,
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."),
+        };
+        foreach (var basePath in candidates)
+        {
+            var full = Path.GetFullPath(Path.Combine(basePath, modelDir));
+            if (Directory.Exists(full)) return full;
+        }
+        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), modelDir));
+    }
+
+    private readonly VoiceService _voiceService = new(FindModelPath());
     private System.Windows.Threading.DispatcherTimer? _recordTimer;
     private DateTime _scheduleDate;
 
@@ -19,6 +36,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
+
+        // 加载 Vosk 语音模型
+        if (!_voiceService.Initialize())
+        {
+            _vm.StatusText = "语音模型未加载，请下载 vosk-model-small-cn-0.22 到 model/ 目录";
+        }
 
         CalendarView.DateClicked += (date) =>
         {
@@ -151,22 +174,30 @@ public partial class MainWindow : Window
         {
             await _voiceService.StartRecordingAsync();
         }
+        catch (InvalidOperationException ex)
+        {
+            _recordTimer.Stop();
+            BtnVoiceIdle.Visibility = Visibility.Visible;
+            BtnVoiceRecording.Visibility = Visibility.Collapsed;
+            MessageBox.Show(ex.Message, "模型未找到");
+        }
         catch (UnauthorizedAccessException)
         {
             _recordTimer.Stop();
             BtnVoiceIdle.Visibility = Visibility.Visible;
-        BtnVoiceRecording.Visibility = Visibility.Collapsed;
+            BtnVoiceRecording.Visibility = Visibility.Collapsed;
             MessageBox.Show("无法访问麦克风。\n请检查：设置→隐私和安全性→麦克风→允许应用访问", "录音失败");
         }
         catch (Exception ex)
         {
             _recordTimer.Stop();
             BtnVoiceIdle.Visibility = Visibility.Visible;
-        BtnVoiceRecording.Visibility = Visibility.Collapsed;
-            // 语音引擎不可用时静默降级，不给用户弹错误
+            BtnVoiceRecording.Visibility = Visibility.Collapsed;
+            MessageBox.Show($"语音引擎错误：{ex.Message}", "语音错误");
         }
-    }
 
+
+    }
     private void StopAndProcess()
     {
         _recordTimer?.Stop();

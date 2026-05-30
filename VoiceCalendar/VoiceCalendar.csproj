@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
@@ -9,5 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Vosk" Version="0.3.38" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 </Project>
