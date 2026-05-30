@@ -26,7 +26,12 @@ public class NlpParserService
     {
         {"一", 1}, {"二", 2}, {"三", 3}, {"四", 4}, {"五", 5},
         {"六", 6}, {"七", 7}, {"八", 8}, {"九", 9}, {"十", 10},
-        {"十一", 11}, {"十二", 12}, {"两", 2}, {"零", 0},
+        {"十一", 11}, {"十二", 12}, {"十三", 13}, {"十四", 14},
+        {"十五", 15}, {"十六", 16}, {"十七", 17}, {"十八", 18}, {"十九", 19},
+        {"二十", 20}, {"二十一", 21}, {"二十二", 22}, {"二十三", 23},
+        {"二十四", 24}, {"二十五", 25}, {"二十六", 26}, {"二十七", 27},
+        {"二十八", 28}, {"二十九", 29}, {"三十", 30}, {"三十一", 31},
+        {"两", 2}, {"零", 0},
     };
 
     private static readonly string[] AddKeywords = { "添加", "新增", "增加", "加入", "加一个", "记一个", "记录", "提醒我", "提醒", "新建", "创建" };
@@ -66,15 +71,20 @@ public class NlpParserService
         return "add";
     }
 
+    // ================================================================
+    //  ParseDate — 日期解析
+    // ================================================================
     public static DateTime? ParseDate(string text, DateTime? today = null)
     {
         today ??= DateTime.Today;
         var t = today.Value;
 
+        // 1. 相对日期关键词：今天/明天/后天/大后天
         foreach (var (kw, offset) in DateKeywords)
             if (text.Contains(kw))
                 return t.AddDays(offset);
 
+        // 2. 下周X
         var nextWeek = Regex.Match(text, @"下周([一二三四五六日天])");
         if (nextWeek.Success)
         {
@@ -87,6 +97,7 @@ public class NlpParserService
             }
         }
 
+        // 3. 本周X
         foreach (var (name, wd) in WeekdayNames)
         {
             if (text.Contains(name))
@@ -97,6 +108,7 @@ public class NlpParserService
             }
         }
 
+        // 4. X月X日 / X月X号
         var md = Regex.Match(text, @"(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]");
         if (md.Success)
         {
@@ -111,11 +123,76 @@ public class NlpParserService
             catch { return null; }
         }
 
+        // 5. 裸阿拉伯数字 X号 / X日（无月份前缀）
+        var bareDay = Regex.Match(text, @"(\d{1,2})\s*[日号]");
+        if (bareDay.Success)
+        {
+            int d = int.Parse(bareDay.Groups[1].Value);
+            if (d >= 1 && d <= 31)
+            {
+                int targetMonth = t.Month;
+                int targetYear = t.Year;
+                if (d < t.Day)
+                {
+                    targetMonth++;
+                    if (targetMonth > 12) { targetMonth = 1; targetYear++; }
+                }
+                try { return new DateTime(targetYear, targetMonth, d); }
+                catch { return null; }
+            }
+        }
+
+        // 6. 裸中文数字 X号 / X日（如"二十三号""五号"）
+        var bareCnDay = Regex.Match(text, @"([一二三四五六七八九十两]{1,4})\s*[日号]");
+        if (bareCnDay.Success)
+        {
+            var cnNum = bareCnDay.Groups[1].Value;
+            var day = ParseChineseNumber(cnNum);
+            if (day >= 1 && day <= 31)
+            {
+                int targetMonth = t.Month;
+                int targetYear = t.Year;
+                if (day < t.Day)
+                {
+                    targetMonth++;
+                    if (targetMonth > 12) { targetMonth = 1; targetYear++; }
+                }
+                try { return new DateTime(targetYear, targetMonth, day.Value); }
+                catch { return null; }
+            }
+        }
+
         return null;
     }
 
+    // ================================================================
+    //  ParseChineseNumber — 中文数字→整数
+    // ================================================================
+    private static int? ParseChineseNumber(string text)
+    {
+        if (CnNum.TryGetValue(text, out int val))
+            return val;
+
+        // 动态组合：二十X / 三十X
+        if ((text.StartsWith("二十") || text.StartsWith("三十")) && text.Length == 3)
+        {
+            var prefix = text.Substring(0, 2);
+            var suffix = text.Substring(2, 1);
+            if (CnNum.TryGetValue(prefix, out int baseVal) &&
+                CnNum.TryGetValue(suffix, out int digit) &&
+                digit <= 9)
+                return baseVal + digit;
+        }
+
+        return null;
+    }
+
+    // ================================================================
+    //  ParseTime — 时间解析
+    // ================================================================
     public static string? ParseTime(string text)
     {
+        // HH:MM 格式
         var hhmm = Regex.Match(text, @"(\d{1,2})\s*[:：]\s*(\d{2})");
         if (hhmm.Success)
         {
@@ -125,15 +202,16 @@ public class NlpParserService
                 return $"{hh:D2}:{m:D2}";
         }
 
+        // X点 / X点半 / X点X分 / X点一刻（含中文数字）
         var timeMatch = Regex.Match(text,
-            @"(\d{1,2}|[一二三四五六七八九十]{1,3})\s*点(?:钟)?(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十]{1,3})\s*分)?)|(一刻)?)");
+            @"(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*点(?:(半)|(?:(?:(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*分)?)|(一刻)?)");
 
         if (!timeMatch.Success) return null;
 
         int hour = 0;
         var hourStr = timeMatch.Groups[1].Value;
         if (int.TryParse(hourStr, out int h)) hour = h;
-        else if (CnNum.TryGetValue(hourStr, out int ch)) hour = ch;
+        else if (ParseChineseNumber(hourStr) is int ch) hour = ch;
         else return null;
 
         int minute = 0;
@@ -143,15 +221,22 @@ public class NlpParserService
         {
             var minStr = timeMatch.Groups[3].Value;
             if (int.TryParse(minStr, out int mm)) minute = mm;
-            else if (CnNum.TryGetValue(minStr, out int cm)) minute = cm;
+            else if (ParseChineseNumber(minStr) is int cm) minute = cm;
         }
 
+        // 时段判断
+        var isAm = Regex.IsMatch(text, @"凌晨|早上|早晨|清晨|天亮");
         if (text.Contains("下午") || text.Contains("晚上"))
         {
             if (hour < 12) hour += 12;
         }
         else if (text.Contains("上午") && hour == 12)
         {
+            hour = 0;
+        }
+        else if (isAm && hour == 12)
+        {
+            // 凌晨12点 → 00:00
             hour = 0;
         }
 
@@ -161,24 +246,44 @@ public class NlpParserService
         return null;
     }
 
+    // ================================================================
+    //  ExtractTitle — 提取日程标题
+    // ================================================================
     public static string ExtractTitle(string text)
     {
         var title = text;
 
+        // 去掉意图关键词
         foreach (var kw in AddKeywords.Concat(DeleteKeywords).Concat(QueryKeywords))
             title = title.Replace(kw, "");
 
+        // 去掉相对日期关键词
         foreach (var kw in DateKeywords.Keys) title = title.Replace(kw, "");
         foreach (var kw in WeekdayNames.Keys) title = title.Replace(kw, "");
 
+        // 去掉 X月X日/X号
         title = Regex.Replace(title, @"\d{1,2}\s*月\s*\d{1,2}\s*[日号]", "");
+
+        // 去掉裸 X号/X日（阿拉伯）
+        title = Regex.Replace(title, @"\d{1,2}\s*[日号]", "");
+
+        // 去掉裸中文数字 X号/X日（如"二十三号"）
+        title = Regex.Replace(title, @"[一二三四五六七八九十两]{1,4}\s*[日号]", "");
+
+        // 去掉 HH:MM
         title = Regex.Replace(title, @"\d{1,2}\s*[:：]\s*\d{2}", "");
-        title = Regex.Replace(title, @"\d{1,2}\s*点\s*(半|一刻|\d{1,2}\s*分)?", "");
-        title = Regex.Replace(title, @"(上午|下午|晚上|中午)", "");
+
+        // 去掉 X点/X点半/X点X分（阿拉伯+中文数字）
+        title = Regex.Replace(title, @"(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*点\s*(半|一刻|(\d{1,2}|[一二三四五六七八九十两]{1,4})\s*分)?", "");
+
+        // 去掉时段词
+        title = Regex.Replace(title, @"(上午|下午|晚上|中午|凌晨|早上|早晨|清晨)", "");
         title = title.Replace("下周", "");
+
+        // 去掉标点
         title = Regex.Replace(title, @"[，,。.!！?？;；、]", "");
 
         title = title.Trim();
-        return string.IsNullOrEmpty(title) ? "未命名事件" : title;
+        return string.IsNullOrEmpty(title) ? "未命名日程" : title;
     }
 }
