@@ -3,14 +3,21 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:VoiceCalendar.Controls"
         xmlns:converters="clr-namespace:VoiceCalendar.Converters"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="G Day" Width="960" Height="700"
         MinWidth="800" MinHeight="580"
         Background="#F2F2F7"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI"
         WindowStyle="None"
-        AllowsTransparency="True"
         ResizeMode="CanResizeWithGrip">
+
+    <WindowChrome.WindowChrome>
+        <shell:WindowChrome GlassFrameThickness="0"
+                            ResizeBorderThickness="5"
+                            CaptionHeight="44"
+                            CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
@@ -32,6 +39,11 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#33FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
@@ -49,9 +61,9 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="G Day" FontSize="16" FontWeight="Bold"
+                <TextBlock Grid.Column="0" Text="G Day" FontSize="16" FontWeight="Bold" shell:WindowChrome.IsHitTestVisibleInChrome="True"
                            Foreground="White" VerticalAlignment="Center" Margin="16,0,0,0"/>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Content="—" Style="{StaticResource WinBtn}" Click="BtnMinimize_Click"/>
                     <Button x:Name="BtnMaximize" Content="□" Style="{StaticResource WinBtn}" Click="BtnMaximize_Click"/>
                     <Button Content="✕" Style="{StaticResource WinBtn}" Click="BtnClose_Click"/>
@@ -259,7 +271,7 @@
                                     Click="BtnVoice_Click" Height="40" Cursor="Hand">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="#F0F6FF" CornerRadius="10"
+                                        <Border x:Name="bg" Background="#F0F6FF" CornerRadius="10"
                                                 BorderBrush="#007AFF" BorderThickness="1">
                                             <StackPanel Orientation="Horizontal"
                                                         HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -267,6 +279,12 @@
                                                 <TextBlock Text="语音添加" FontSize="13" Foreground="#007AFF" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
+                                    
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#D6E9FF"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Button.Template>
                             </Button>
@@ -276,13 +294,19 @@
                                     Visibility="Collapsed">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="#007AFF" CornerRadius="10">
+                                        <Border x:Name="bg" Background="#007AFF" CornerRadius="10">
                                             <StackPanel Orientation="Horizontal"
                                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock Text="⏺" FontSize="14" Foreground="White" Margin="0,0,6,0"/>
-                                                <TextBlock Text="点击暂停" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="RecordingLabel" Text="结束录制" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
+                                    
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#0055CC"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Button.Template>
                             </Button>
@@ -292,13 +316,19 @@
                                     Click="BtnNewFromSchedule_Click" Height="40" Cursor="Hand">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="#007AFF" CornerRadius="10">
+                                        <Border x:Name="bg" Background="#007AFF" CornerRadius="10">
                                             <StackPanel Orientation="Horizontal"
                                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock Text="+" FontSize="18" Foreground="White" Margin="0,0,6,0"/>
                                                 <TextBlock Text="新建" FontSize="13" Foreground="White" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
+                                    
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#0055CC"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Button.Template>
                             </Button>
@@ -314,22 +344,34 @@
                                         Click="BtnCancelForm_Click" Height="40" Cursor="Hand">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
-                                            <Border Background="#F2F2F7" CornerRadius="10">
+                                            <Border x:Name="bg" Background="#F2F2F7" CornerRadius="10">
                                                 <TextBlock Text="取消" FontSize="13" Foreground="#8E8E93"
                                                            FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                        </ControlTemplate>
+                                        
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#E5E5EA"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
                                     </Button.Template>
                                 </Button>
                                 <Button Grid.Column="2" x:Name="BtnSaveForm"
                                         Click="BtnSaveForm_Click" Height="40" Cursor="Hand">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
-                                            <Border Background="#007AFF" CornerRadius="10">
+                                            <Border x:Name="bg" Background="#007AFF" CornerRadius="10">
                                                 <TextBlock Text="保存" FontSize="13" Foreground="White"
                                                            FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                        </ControlTemplate>
+                                        
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#0055CC"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
                                     </Button.Template>
                                 </Button>
                             </Grid>
@@ -339,6 +381,5 @@
             </Border>
         </Grid>
 
-        <Border Grid.RowSpan="2" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" IsHitTestVisible="False"/>
     </Grid>
 </Window>

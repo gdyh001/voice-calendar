@@ -7,6 +7,8 @@ using System.Windows.Controls;
 using VoiceCalendar.Models;
 using VoiceCalendar.Services;
 using VoiceCalendar.ViewModels;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 
 namespace VoiceCalendar;
 
@@ -24,6 +26,33 @@ public partial class MainWindow : Window
     private DateTime _startDateTime;
     private DateTime _endDateTime;
     private bool _suppressEvents;
+
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+
+    [DllImport("user32.dll")]
+    private static extern int DeleteObject(IntPtr hObject);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    private bool _isWindows11;
+    private IntPtr _currentRegion = IntPtr.Zero;
 
     public MainWindow()
     {
@@ -57,6 +86,67 @@ public partial class MainWindow : Window
         BtnMaximize.Content = WindowState == WindowState.Maximized ? "❐" : "□";
     }
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd = new WindowInteropHelper(this).Handle;
+
+        _isWindows11 = Environment.OSVersion.Version.Build >= 22000;
+
+        if (_isWindows11)
+        {
+            var preference = DWMWCP_ROUND;
+            DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref preference, sizeof(int));
+        }
+        else
+        {
+            ApplyRoundedCorners(hwnd);
+            var source = HwndSource.FromHwnd(hwnd);
+            source?.AddHook(WndProc);
+            StateChanged += (_, _) =>
+            {
+                if (WindowState == WindowState.Maximized)
+                    RemoveRoundedCorners(hwnd);
+                else
+                    ApplyRoundedCorners(hwnd);
+            };
+        }
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_SIZE = 0x0005;
+        if (msg == WM_SIZE && !_isWindows11)
+        {
+            if (WindowState == WindowState.Maximized)
+                RemoveRoundedCorners(hwnd);
+            else
+                ApplyRoundedCorners(hwnd);
+        }
+        return IntPtr.Zero;
+    }
+
+    private void ApplyRoundedCorners(IntPtr hwnd)
+    {
+        RemoveRoundedCorners(hwnd);
+        GetWindowRect(hwnd, out var rect);
+        int width = rect.Right - rect.Left;
+        int height = rect.Bottom - rect.Top;
+        int radius = 12;
+        _currentRegion = CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius);
+        SetWindowRgn(hwnd, _currentRegion, true);
+    }
+
+    private void RemoveRoundedCorners(IntPtr hwnd)
+    {
+        if (_currentRegion != IntPtr.Zero)
+        {
+            DeleteObject(_currentRegion);
+            _currentRegion = IntPtr.Zero;
+            SetWindowRgn(hwnd, IntPtr.Zero, true);
+        }
+    }
 
     // === 日程 ===
     private void PopulateSchedule(DateTime date)
@@ -101,6 +191,7 @@ public partial class MainWindow : Window
     {
         SchedulePanel.Visibility = Visibility.Visible;
         FormPanel.Visibility = Visibility.Collapsed;
+        TxtLiveText.Text = "";
         BtnNewFromSchedule.Visibility = Visibility.Visible;
         FormButtons.Visibility = Visibility.Collapsed;
     }
@@ -149,6 +240,14 @@ public partial class MainWindow : Window
     {
         BtnVoiceIdle.Visibility = Visibility.Collapsed;
         BtnVoiceRecording.Visibility = Visibility.Visible;
+        BtnVoiceRecording.ApplyTemplate();
+        var label = BtnVoiceRecording.Template.FindName("RecordingLabel", BtnVoiceRecording) as System.Windows.Controls.TextBlock;
+        if (label != null) label.Text = "准备中...";
+        TxtLiveText.Visibility = Visibility.Collapsed;
+
+        await Task.Delay(300);
+
+        if (label != null) label.Text = "结束录制";
         TxtLiveText.Visibility = Visibility.Visible;
         TxtLiveText.Text = "识别中...";
 
@@ -201,6 +300,7 @@ public partial class MainWindow : Window
         ResetModelIdleTimer();
         BtnVoiceIdle.Visibility = Visibility.Visible;
         BtnVoiceRecording.Visibility = Visibility.Collapsed;
+        TxtLiveText.Text = "";
 
         if (!string.IsNullOrEmpty(text) && !text.StartsWith("["))
         {
@@ -211,11 +311,24 @@ public partial class MainWindow : Window
     private void AutoFillForm(string text)
     {
         var parsed = _nlp.Parse(text);
+
+        if (parsed.Action == "delete" || parsed.Action == "query")
+        {
+            _vm.ProcessVoiceCommand(text);
+            CalendarView.GoToDate(_vm.SelectedDate);
+            PopulateSchedule(_vm.SelectedDate);
+            TxtLiveText.Text = "";
+            return;
+        }
+
         var today = DateTime.Today;
 
         TxtEventTitle.Text = parsed.Title;
         _startDateTime = (parsed.Date ?? today).Date.AddHours(parsed.Hour ?? 4).AddMinutes(parsed.Minute ?? 0);
-        _endDateTime = _startDateTime.AddHours(1);
+        if (parsed.EndHour.HasValue)
+            _endDateTime = (parsed.Date ?? today).Date.AddHours(parsed.EndHour.Value).AddMinutes(parsed.EndMinute ?? 0);
+        else
+            _endDateTime = _startDateTime.AddHours(1);
 
         _editMode = EditMode.None;
         RefreshTimeDisplays();

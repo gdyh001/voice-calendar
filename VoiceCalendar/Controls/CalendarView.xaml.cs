@@ -135,6 +135,9 @@ public class DayCell : Border
     private static readonly Brush White = new SolidColorBrush(Colors.White);
     private static readonly Brush DarkText = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E));
     private static readonly Brush TodayBg = new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE));
+    private static readonly Brush HoverBg = new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE));
+    private bool _isSelected;
+    private bool _isToday;
 
     public DayCell()
     {
@@ -142,6 +145,17 @@ public class DayCell : Border
         CornerRadius = new CornerRadius(8);
         Margin = new Thickness(1);
         Cursor = System.Windows.Input.Cursors.Hand;
+
+        MouseEnter += (_, _) =>
+        {
+            if (!_isSelected && !_isToday)
+                Background = HoverBg;
+        };
+        MouseLeave += (_, _) =>
+        {
+            if (!_isSelected && !_isToday)
+                Background = Transparent;
+        };
 
         var stack = new StackPanel
         {
@@ -182,6 +196,8 @@ public class DayCell : Border
     public void SetDate(int year, int month, int day, bool isToday, bool isSelected, bool isWeekend, bool hasEvents, int dotCount)
     {
         Date = new DateTime(year, month, day);
+        _isToday = isToday;
+        _isSelected = isSelected;
         _dayText.Text = day.ToString();
         _dotsPanel.Children.Clear();
 

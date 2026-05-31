@@ -73,6 +73,7 @@ public class MainViewModel : INotifyPropertyChanged
                 int count = _storage.DeleteEventsByKeyword(parsed.Title, targetDate);
                 if (count > 0)
                 {
+                    SelectedDate = targetDate ?? SelectedDate;
                     RefreshEvents();
                     StatusText = $"已删除 {count} 个匹配事件";
                 }
