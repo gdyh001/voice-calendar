@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Threading.Tasks;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using VoiceCalendar.Models;
 using VoiceCalendar.Services;
 using VoiceCalendar.ViewModels;
@@ -26,6 +27,8 @@ public partial class MainWindow : Window
     private DateTime _startDateTime;
     private DateTime _endDateTime;
     private bool _suppressEvents;
+    private string? _editingEventId;  // null=新建, not null=编辑中
+    private CalendarEvent? _pendingDeleteEvent;
 
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWCP_ROUND = 2;
@@ -179,16 +182,28 @@ public partial class MainWindow : Window
         BtnNewFromSchedule.Visibility = Visibility.Collapsed;
         FormButtons.Visibility = Visibility.Visible;
 
+        _editingEventId = null;
+        FormTitle.Text = "新建日程";
         TxtEventTitle.Text = "";
         _startDateTime = _scheduleDate.Date.AddHours(4);
         _endDateTime = _scheduleDate.Date.AddHours(5);
         _editMode = EditMode.None;
+        ToggleRecurring.IsChecked = false;
+        ToggleRecurring.Content = "🔄 每周重复";
+        DayOfWeekPanel.Visibility = Visibility.Collapsed;
+        foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children) tb.IsChecked = false;
         RefreshTimeDisplays();
         LeaveEditMode();
+        ToggleRecurring.IsChecked = false;
+        ToggleRecurring.Content = "🔄 每周重复";
+        DayOfWeekPanel.Visibility = Visibility.Collapsed;
+        foreach (ToggleButton tb in DayOfWeekPanel.Children) tb.IsChecked = false;
     }
 
     private void BtnCancelForm_Click(object sender, RoutedEventArgs e)
     {
+        _editingEventId = null;
+        FormTitle.Text = "新建日程";
         SchedulePanel.Visibility = Visibility.Visible;
         FormPanel.Visibility = Visibility.Collapsed;
         TxtLiveText.Text = "";
@@ -196,11 +211,54 @@ public partial class MainWindow : Window
         FormButtons.Visibility = Visibility.Collapsed;
     }
 
-    private void BtnSaveForm_Click(object sender, RoutedEventArgs e)
+    private void ToggleRecurring_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleRecurring.Content = ToggleRecurring.IsChecked == true ? "取消重复" : "🔄 每周重复";
+        DayOfWeekPanel.Visibility = ToggleRecurring.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (ToggleRecurring.IsChecked != true)
+        {
+            foreach (ToggleButton tb in DayOfWeekPanel.Children) tb.IsChecked = false;
+        }
+    }
+
+    void DayToggle_Click(object sender, RoutedEventArgs e)
+    {
+        // Ensure at least ToggleRecurring stays checked if any day is selected
+        bool anyChecked = false;
+        foreach (ToggleButton tb in DayOfWeekPanel.Children)
+            if (tb.IsChecked == true) { anyChecked = true; break; }
+        ToggleRecurring.IsChecked = anyChecked;
+        ToggleRecurring.Content = anyChecked ? "取消重复" : "🔄 每周重复";
+        DayOfWeekPanel.Visibility = anyChecked ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    void BtnSaveForm_Click(object sender, RoutedEventArgs e)
     {
         var title = TxtEventTitle.Text.Trim();
         if (string.IsNullOrEmpty(title))
             title = "日程";
+
+        if (_editingEventId != null)
+        {
+            var editStartTime = $"{_startDateTime.Hour:D2}:{_startDateTime.Minute:D2}";
+            string? editEndTime = $"{_endDateTime.Hour:D2}:{_endDateTime.Minute:D2}";
+            string? editRecDays = null;
+            if (ToggleRecurring.IsChecked == true)
+            {
+                var days = new System.Collections.Generic.List<string>();
+                foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children)
+                    if (tb.IsChecked == true && tb.Tag != null)
+                        days.Add(tb.Tag.ToString());
+                if (days.Count > 0) editRecDays = string.Join(",", days);
+            }
+            _vm.UpdateEvent(_editingEventId, title, _startDateTime.Date, editStartTime, editEndTime, editRecDays ?? "");
+            CalendarView.Refresh();
+            PopulateSchedule(_scheduleDate);
+            _editingEventId = null;
+            FormTitle.Text = "新建日程";
+            BtnCancelForm_Click(sender, e);
+            return;
+        }
 
         var startDate = _startDateTime.Date;
         var startTime = $"{_startDateTime.Hour:D2}:{_startDateTime.Minute:D2}";
@@ -212,10 +270,19 @@ public partial class MainWindow : Window
         
         
 
-        _vm.AddEventManually(title, startDate, startTime);
+        string? recDays = null;
+        if (ToggleRecurring.IsChecked == true)
+        {
+            var days = new System.Collections.Generic.List<string>();
+            foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children)
+                if (tb.IsChecked == true && tb.Tag != null)
+                    days.Add(tb.Tag.ToString());
+            if (days.Count > 0) recDays = string.Join(",", days);
+        }
+        _vm.AddEventManually(title, startDate, startTime, endTime, recDays);
         if (endDate > startDate)
             for (var d = startDate.AddDays(1); d <= endDate; d = d.AddDays(1))
-                _vm.AddEventManually(title, d, null);
+                _vm.AddEventManually(title, d, null, null, null);
 
         CalendarView.Refresh();
         BtnCancelForm_Click(sender, e);
@@ -323,6 +390,16 @@ public partial class MainWindow : Window
 
         var today = DateTime.Today;
 
+        if (parsed.IsRecurring && parsed.RecurrenceDays != null)
+        {
+            ToggleRecurring.IsChecked = true;
+            DayOfWeekPanel.Visibility = Visibility.Visible;
+            foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children)
+            {
+                if (tb.Tag != null && parsed.RecurrenceDays.Split(",").Contains(tb.Tag.ToString()))
+                    tb.IsChecked = true;
+            }
+        }
         TxtEventTitle.Text = parsed.Title;
         _startDateTime = (parsed.Date ?? today).Date.AddHours(parsed.Hour ?? 4).AddMinutes(parsed.Minute ?? 0);
         if (parsed.EndHour.HasValue)
@@ -331,8 +408,16 @@ public partial class MainWindow : Window
             _endDateTime = _startDateTime.AddHours(1);
 
         _editMode = EditMode.None;
+        ToggleRecurring.IsChecked = false;
+        ToggleRecurring.Content = "🔄 每周重复";
+        DayOfWeekPanel.Visibility = Visibility.Collapsed;
+        foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children) tb.IsChecked = false;
         RefreshTimeDisplays();
         LeaveEditMode();
+        ToggleRecurring.IsChecked = false;
+        ToggleRecurring.Content = "🔄 每周重复";
+        DayOfWeekPanel.Visibility = Visibility.Collapsed;
+        foreach (ToggleButton tb in DayOfWeekPanel.Children) tb.IsChecked = false;
 
 
         SchedulePanel.Visibility = Visibility.Collapsed;
@@ -344,35 +429,78 @@ public partial class MainWindow : Window
     }
 
 
-    // === 右键 ===
-    private void MenuItemEdit_Click(object sender, RoutedEventArgs e)
+
+    // === 编辑/删除共用 ===
+    private void EditEvent(CalendarEvent ev)
     {
-        if (sender is MenuItem mi && mi.DataContext is CalendarEvent ev)
+        _editingEventId = ev.Id;
+        FormTitle.Text = "编辑日程";
+        TxtEventTitle.Text = ev.Title;
+        _startDateTime = ev.EventDate;
+        if (!string.IsNullOrEmpty(ev.EventTime) && ev.EventTime.Length == 5)
         {
-            var dlg = new EditEventDialog(ev) { Owner = this };
-            if (dlg.ShowDialog() == true)
+            _startDateTime = _startDateTime.AddHours(int.Parse(ev.EventTime.Substring(0, 2)))
+                .AddMinutes(int.Parse(ev.EventTime.Substring(3, 2)));
+        }
+        else _startDateTime = _startDateTime.AddHours(4);
+        _endDateTime = _startDateTime.AddHours(1);
+        if (ev.IsRecurring && ev.RecurrenceDays != null)
+        {
+            ToggleRecurring.IsChecked = true;
+            ToggleRecurring.Content = "取消重复";
+            DayOfWeekPanel.Visibility = System.Windows.Visibility.Visible;
+            foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children)
             {
-                _vm.UpdateEvent(ev.Id, dlg.EventTitle, dlg.EventDate, dlg.EventTime);
-                CalendarView.Refresh();
-                PopulateSchedule(_scheduleDate);
+                tb.IsChecked = tb.Tag != null && ev.RecurrenceDays.Split(',').Contains(tb.Tag.ToString());
             }
         }
+        _editMode = EditMode.None;
+        RefreshTimeDisplays();
+        LeaveEditMode();
+        SchedulePanel.Visibility = System.Windows.Visibility.Collapsed;
+        FormPanel.Visibility = System.Windows.Visibility.Visible;
+        BtnNewFromSchedule.Visibility = System.Windows.Visibility.Collapsed;
+        FormButtons.Visibility = System.Windows.Visibility.Visible;
     }
 
-    private void MenuItemDelete_Click(object sender, RoutedEventArgs e)
+    private void DeleteEvent(CalendarEvent ev)
     {
-        if (sender is MenuItem mi && mi.DataContext is CalendarEvent ev)
-        {
-            if (MessageBox.Show($"确定删除「{ev.Title}」?", "确认删除",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-            {
-                _vm.DeleteEvent(ev.Id);
-                CalendarView.Refresh();
-                PopulateSchedule(_scheduleDate);
-            }
-        }
+        _pendingDeleteEvent = ev;
+        TxtDeleteConfirmMsg.Text = $"确定删除「{ev.Title}」?";
+        DeleteConfirmOverlay.Visibility = System.Windows.Visibility.Visible;
     }
 
+    // === 删除确认弹窗 ===
+    private void BtnDeleteConfirmCancel_Click(object sender, RoutedEventArgs e)
+    {
+        _pendingDeleteEvent = null;
+        DeleteConfirmOverlay.Visibility = System.Windows.Visibility.Collapsed;
+    }
+
+    private void BtnDeleteConfirmOk_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pendingDeleteEvent != null)
+        {
+            _vm.DeleteEvent(_pendingDeleteEvent.Id);
+            CalendarView.Refresh();
+            PopulateSchedule(_scheduleDate);
+        }
+        _pendingDeleteEvent = null;
+        DeleteConfirmOverlay.Visibility = System.Windows.Visibility.Collapsed;
+    }
+
+    // === 悬浮按钮 ===
+    private void BtnEditInline_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is CalendarEvent ev)
+            EditEvent(ev);
+    }
+
+    private void BtnDeleteInline_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is CalendarEvent ev)
+            DeleteEvent(ev);
+    }
 
     // === iOS 时间选择器 ===
     private void RefreshTimeDisplays()
@@ -447,6 +575,10 @@ public partial class MainWindow : Window
     private void LeaveEditMode()
     {
         _editMode = EditMode.None;
+        ToggleRecurring.IsChecked = false;
+        ToggleRecurring.Content = "🔄 每周重复";
+        DayOfWeekPanel.Visibility = Visibility.Collapsed;
+        foreach (System.Windows.Controls.Primitives.ToggleButton tb in DayOfWeekPanel.Children) tb.IsChecked = false;
         if (StartRow != null) StartRow.Background = System.Windows.Media.Brushes.Transparent;
         if (EndRow != null) EndRow.Background = System.Windows.Media.Brushes.Transparent;
         if (TimePickerPanel != null) TimePickerPanel.Visibility = Visibility.Collapsed;
@@ -470,6 +602,17 @@ public partial class MainWindow : Window
     {
         if (_suppressEvents) return;
         ApplyPickerValues();
+    }
+
+    private void TimePicker_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (_suppressEvents) return;
+        if (sender is not ComboBox cb) return;
+        e.Handled = true;
+        if (e.Delta > 0)
+            cb.SelectedIndex = cb.SelectedIndex <= 0 ? cb.Items.Count - 1 : cb.SelectedIndex - 1;
+        else
+            cb.SelectedIndex = cb.SelectedIndex >= cb.Items.Count - 1 ? 0 : cb.SelectedIndex + 1;
     }
 
     private void HiddenDatePicker_DateChanged(object sender, SelectionChangedEventArgs e)
@@ -516,28 +659,3 @@ public class AddEventDialog : Window
     static Button Btn(string t, string c, Action click) { var b = new Button { Content = t, FontSize = 14, Padding = new Thickness(16, 6, 16, 6), Background = System.Windows.Media.Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(c)), Cursor = System.Windows.Input.Cursors.Hand, Margin = new Thickness(8, 0, 0, 0) }; b.Click += (_, _) => click(); return b; }
 }
 
-public class EditEventDialog : Window
-{
-    public string EventTitle { get; private set; } = "";
-    public DateTime EventDate { get; private set; }
-    public string? EventTime { get; private set; }
-    public EditEventDialog(CalendarEvent ev)
-    {
-        Title = "编辑日程"; Width = 360; Height = 260;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner; ResizeMode = ResizeMode.NoResize;
-        Background = System.Windows.Media.Brushes.White;
-        var g = new Grid { Margin = new Thickness(20) };
-        for (int i = 0; i < 7; i++) g.RowDefinitions.Add(new RowDefinition { Height = i < 6 ? GridLength.Auto : new GridLength(1, GridUnitType.Star) });
-        g.Children.Add(Lbl("日程名称", 0, 0, 4)); var tb = Tb(ev.Title); Grid.SetRow(tb, 1); g.Children.Add(tb);
-        g.Children.Add(Lbl("日期", 12, 0, 4)); var dp = new DatePicker { SelectedDate = ev.EventDate, FontSize = 14 }; Grid.SetRow(dp, 3); g.Children.Add(dp);
-        g.Children.Add(Lbl("时间 (HH:mm)", 12, 0, 4)); var tm = Tb(ev.EventTime ?? "", 80); Grid.SetRow(tm, 5); g.Children.Add(tm);
-        var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        var cancel = new Button { Content = "取消", FontSize = 14, Padding = new Thickness(12, 6, 12, 6), Background = System.Windows.Media.Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x8E,0x8E,0x93)), Cursor = System.Windows.Input.Cursors.Hand };
-        cancel.Click += (_, _) => { DialogResult = false; Close(); };
-        var save = new Button { Content = "保存", FontSize = 14, FontWeight = FontWeights.SemiBold, Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(8, 0, 0, 0), Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x00,0x7A,0xFF)), Foreground = System.Windows.Media.Brushes.White, BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand };
-        save.Click += (_, _) => { var t = tb.Text.Trim(); if (string.IsNullOrEmpty(t)) { t = "日程"; } EventTitle = t; EventDate = dp.SelectedDate?.Date ?? DateTime.Today; var t2 = tm.Text.Trim(); if (!string.IsNullOrEmpty(t2) && !System.Text.RegularExpressions.Regex.IsMatch(t2, @"^\d{2}:\d{2}$")) { MessageBox.Show("时间格式 HH:mm"); return; } EventTime = string.IsNullOrEmpty(t2) ? null : t2; DialogResult = true; Close(); };
-        btns.Children.Add(cancel); btns.Children.Add(save); Grid.SetRow(btns, 6); g.Children.Add(btns); Content = g;
-    }
-    static TextBlock Lbl(string t, int top, int btm, int bot) => new() { Text = t, FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1C,0x1C,0x1E)), Margin = new Thickness(0, top, btm, bot) };
-    static TextBox Tb(string t, int w = 0) => new() { Text = t, FontSize = 14, Padding = new Thickness(8, 6, 8, 6), Width = w > 0 ? w : double.NaN, BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE5,0xE5,0xEA)), BorderThickness = new Thickness(1) };
-}

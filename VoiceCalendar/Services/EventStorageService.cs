@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -47,10 +47,15 @@ public class EventStorageService
         _dirty = false;
     }
 
-    public CalendarEvent AddEvent(string title, DateTime eventDate, string? eventTime = null)
+    public CalendarEvent AddEvent(string title, DateTime eventDate, string? eventTime = null, string? endTime = null, string? recurrenceDays = null)
     {
         EnsureLoaded();
-        var ev = new CalendarEvent(title, eventDate.Date, eventTime);
+        var ev = new CalendarEvent(title, eventDate.Date, eventTime) { EndTime = endTime };
+        if (!string.IsNullOrEmpty(recurrenceDays))
+        {
+            ev.IsRecurring = true;
+            ev.RecurrenceDays = recurrenceDays;
+        }
         _cache!.Add(ev);
         MarkDirty();
         return ev;
@@ -77,8 +82,11 @@ public class EventStorageService
     public List<CalendarEvent> GetEventsByDate(DateTime date)
     {
         EnsureLoaded();
+        int dow = ((int)date.DayOfWeek + 6) % 7; // 0=Monday
+        string dowStr = dow.ToString();
         return _cache!
-            .Where(e => e.EventDate == date.Date)
+            .Where(e => e.EventDate == date.Date ||
+                (e.IsRecurring && e.RecurrenceDays != null && e.RecurrenceDays.Split(',').Contains(dowStr) && e.EventDate <= date.Date))
             .OrderBy(e => e.EventTime ?? "00:00")
             .ToList();
     }
@@ -105,7 +113,7 @@ public class EventStorageService
     }
 
     public CalendarEvent? UpdateEvent(string id, string? title = null,
-        DateTime? eventDate = null, string? eventTime = null)
+        DateTime? eventDate = null, string? eventTime = null, string? endTime = null, string? recurrenceDays = null)
     {
         EnsureLoaded();
         var ev = _cache!.FirstOrDefault(e => e.Id == id);
@@ -113,6 +121,12 @@ public class EventStorageService
         if (title != null) ev.Title = title;
         if (eventDate.HasValue) ev.EventDate = eventDate.Value.Date;
         if (eventTime != null) ev.EventTime = eventTime;
+        if (endTime != null) ev.EndTime = endTime;
+        if (recurrenceDays != null)
+        {
+            ev.IsRecurring = !string.IsNullOrEmpty(recurrenceDays);
+            ev.RecurrenceDays = string.IsNullOrEmpty(recurrenceDays) ? null : recurrenceDays;
+        }
         MarkDirty();
         return ev;
     }
@@ -129,6 +143,20 @@ public class EventStorageService
             {
                 int day = e.EventDate.Day;
                 counts[day] = counts.GetValueOrDefault(day) + 1;
+            }
+            if (e.IsRecurring && e.RecurrenceDays != null)
+            {
+                var start = e.EventDate;
+                var end = new DateTime(year, month, DateTime.DaysInMonth(year, month));
+                if (start > end) continue;
+                var current = start > new DateTime(year, month, 1) ? start : new DateTime(year, month, 1);
+                while (current <= end)
+                {
+                    int cdow = ((int)current.DayOfWeek + 6) % 7;
+                    if (e.RecurrenceDays.Split(',').Contains(cdow.ToString()))
+                        counts[current.Day] = counts.GetValueOrDefault(current.Day) + 1;
+                    current = current.AddDays(1);
+                }
             }
         }
         return counts;

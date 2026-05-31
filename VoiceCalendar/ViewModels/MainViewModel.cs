@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using VoiceCalendar.Models;
 using VoiceCalendar.Services;
+using System.Linq;
 
 namespace VoiceCalendar.ViewModels;
 
@@ -63,7 +64,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             case "add":
                 var date = parsed.Date ?? today;
-                var ev = _storage.AddEvent(parsed.Title, date, parsed.Time);
+                var ev = _storage.AddEvent(parsed.Title, date, parsed.Time, parsed.RecurrenceDays);
                 SelectedDate = date;
                 StatusText = $"已添加: {ev.Title} ({date:yyyy-MM-dd} {ev.TimeDisplay})";
                 break;
@@ -96,16 +97,16 @@ public class MainViewModel : INotifyPropertyChanged
 
     public void RefreshEvents()
     {
-        var list = _storage.GetEventsByDate(SelectedDate);
+        var list = _storage.GetEventsByDate(SelectedDate).OrderBy(e => e.EventTime ?? "99:99").ToList();
         Events.Clear(); foreach (var e in list) Events.Add(e);
         StatusText = list.Count > 0
             ? $"{SelectedDate:yyyy年MM月dd日} - {list.Count}个事件"
             : $"{SelectedDate:yyyy年MM月dd日} - 暂无事件";
     }
 
-    public CalendarEvent AddEventManually(string title, DateTime date, string? time)
+    public CalendarEvent AddEventManually(string title, DateTime date, string? time, string? endTime = null, string? recurrenceDays = null)
     {
-        var ev = _storage.AddEvent(title, date, time);
+        var ev = _storage.AddEvent(title, date, time, endTime, recurrenceDays);
         if (date.Date == SelectedDate.Date) RefreshEvents();
         StatusText = $"已添加: {title}";
         return ev;
@@ -118,9 +119,9 @@ public class MainViewModel : INotifyPropertyChanged
         return ok;
     }
 
-    public CalendarEvent? UpdateEvent(string id, string title, DateTime date, string? time)
+    public CalendarEvent? UpdateEvent(string id, string title, DateTime date, string? time, string? endTime = null, string? recurrenceDays = null)
     {
-        var ev = _storage.UpdateEvent(id, title, date, time);
+        var ev = _storage.UpdateEvent(id, title, date, time, endTime, recurrenceDays);
         if (ev != null && date.Date == SelectedDate.Date) RefreshEvents();
         StatusText = ev != null ? $"已更新: {title}" : "更新失败";
         return ev;
