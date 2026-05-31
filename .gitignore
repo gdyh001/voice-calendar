@@ -26,3 +26,13 @@ __pycache__/
 Thumbs.db
 # Vosk speech model (download separately)
 VoiceCalendar/model/vosk-model-cn-0.22/
+
+# Temp / legacy artifacts
+VoiceCalendar/lib/
+VoiceCalendar/model/
+VoiceCalendar/MainWindow.xaml.cs.header
+test_dll.cs
+tmp_cs.txt
+tmp_xaml.txt
+whisper_test/
+暂存/
