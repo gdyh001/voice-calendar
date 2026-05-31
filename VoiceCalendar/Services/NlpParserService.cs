@@ -50,6 +50,8 @@ public class NlpParserService
         public int? Minute { get; set; }
         public string? EndTime { get; set; }
         public int? EndHour { get; set; }
+        public bool IsRecurring { get; set; }
+        public string? RecurrenceDays { get; set; }
         public int? EndMinute { get; set; }
         public string Title { get; set; } = "";
         public string Raw { get; set; } = "";
@@ -61,6 +63,9 @@ public class NlpParserService
         var result = new ParseResult { Raw = text };
 
         result.Action = ParseAction(text);
+        var (isRecurring, recurrenceDays) = ParseRecurrence(text);
+        result.IsRecurring = isRecurring;
+        result.RecurrenceDays = recurrenceDays;
         result.Date = ParseDate(text, today);
         var (startTime, endTime) = ParseTimeRange(text);
         result.Time = startTime;
@@ -371,6 +376,7 @@ public class NlpParserService
 
         // 去掉时段词
         title = Regex.Replace(title, @"(上午|下午|晚上|中午|凌晨|早上|早晨|清晨)", "");
+        title = Regex.Replace(title, @"每周[一二三四五六日天]", "");
         title = title.Replace("下周", "");
         title = title.Replace("到", "");
         title = title.Replace("至", "");
@@ -381,5 +387,21 @@ public class NlpParserService
 
         title = title.Trim();
         return string.IsNullOrEmpty(title) ? "未命名日程" : title;
+    }
+
+    private static (bool, string?) ParseRecurrence(string text)
+    {
+        var weeklyMatch = Regex.Match(text, @"每周([一二三四五六日天])");
+        if (weeklyMatch.Success)
+        {
+            var dayMap = new Dictionary<char, int>
+            {
+                {'一', 0}, {'二', 1}, {'三', 2}, {'四', 3}, {'五', 4}, {'六', 5}, {'日', 6}, {'天', 6}
+            };
+            var day = weeklyMatch.Groups[1].Value[0];
+            if (dayMap.TryGetValue(day, out int idx))
+                return (true, idx.ToString());
+        }
+        return (false, null);
     }
 }
