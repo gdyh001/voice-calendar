@@ -1,12 +1,16 @@
-ï»¿# Vosk è¯­éŸ³æ¨¡å‹ï¼ˆå¤§æ¨¡å‹ï¼Œç²¾åº¦æ›´é«˜ï¼‰
+# ÓïÒôÊ¶±ğÄ£ĞÍ
 
-è¯·ä¸‹è½½ vosk-model-cn-0.22 å¹¶è§£å‹åˆ°æ­¤ç›®å½•ï¼š
+±¾ÏîÄ¿Ê¹ÓÃ Sherpa-ONNX + Paraformer ÖĞÎÄĞ¡Ä£ĞÍ½øĞĞÀëÏßÓïÒôÊ¶±ğ¡£
 
-https://alphacephei.com/vosk/models/vosk-model-cn-0.22.zip
+## ÏÂÔØÄ£ĞÍ
 
-è§£å‹åç¡®ä¿ç›®å½•ç»“æ„ä¸ºï¼š
-  VoiceCalendar/model/vosk-model-cn-0.22/
-    â”œâ”€â”€ am/
-    â”œâ”€â”€ conf/
-    â”œâ”€â”€ graph/
-    â””â”€â”€ ...
+´ÓÒÔÏÂµØÖ·ÏÂÔØ²¢½âÑ¹µ½ `VoiceCalendar/model/paraformer-zh-small/` Ä¿Â¼£º
+
+https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-small-2024-03-09.tar.bz2
+
+½âÑ¹ºóÄ¿Â¼Ó¦°üº¬ÒÔÏÂÎÄ¼ş£º
+- tokens.txt
+- encoder.int8.onnx
+- decoder.int8.onnx
+
+Ä£ĞÍ´óĞ¡Ô¼ 50MB£¬½âÑ¹ºóÔ¼ 55MB¡£

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -14,7 +14,7 @@ public partial class CalendarView : UserControl
     public DateTime CurrentMonth { get; private set; } = DateTime.Today;
     public DateTime SelectedDate { get; private set; } = DateTime.Today;
 
-    private readonly EventStorageService _storage = new();
+    private readonly EventStorageService _storage = EventStorageService.Instance;
     private readonly List<DayCell> _dayCells = new();
 
     public event Action<DateTime>? DateClicked;
@@ -133,6 +133,8 @@ public class DayCell : Border
     private static readonly Brush IosGray = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93));
     private static readonly Brush Transparent = new SolidColorBrush(Colors.Transparent);
     private static readonly Brush White = new SolidColorBrush(Colors.White);
+    private static readonly Brush DarkText = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E));
+    private static readonly Brush TodayBg = new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE));
 
     public DayCell()
     {
@@ -193,7 +195,7 @@ public class DayCell : Border
         {
             _dayText.Foreground = IosBlue;
             _dayText.FontWeight = FontWeights.Bold;
-            Background = new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE));
+            Background = TodayBg;
         }
         else if (isWeekend)
         {
@@ -203,7 +205,7 @@ public class DayCell : Border
         }
         else
         {
-            _dayText.Foreground = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E));
+            _dayText.Foreground = DarkText;
             _dayText.FontWeight = FontWeights.Normal;
             Background = Transparent;
         }

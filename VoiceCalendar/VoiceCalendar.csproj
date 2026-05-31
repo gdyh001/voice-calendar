@@ -7,9 +7,4 @@
     <RootNamespace>VoiceCalendar</RootNamespace>
     <AssemblyName>VoiceCalendar</AssemblyName>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="Vosk" Version="0.3.38" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
-  </ItemGroup>
 </Project>

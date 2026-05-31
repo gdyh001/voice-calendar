@@ -1,137 +1,79 @@
-using System;
-using System.IO;
-using System.Text.Json;
+﻿using System;
 using System.Threading.Tasks;
-using NAudio.Wave;
-using Vosk;
+using Windows.Media.SpeechRecognition;
 
 namespace VoiceCalendar.Services;
 
 public class VoiceService
 {
-    private Model? _model;
-    private VoskRecognizer? _recognizer;
-    private WaveInEvent? _waveIn;
-    private string _accumulatedText = "";
-    private readonly object _lock = new();
-    private readonly string _modelPath;
+    private SpeechRecognizer? _recognizer;
+    private bool _isListening;
+    private string _finalText = "";
 
-    public bool IsListening { get; private set; }
+    public bool IsListening => _isListening;
     public event Action<string>? PartialResultChanged;
 
-    public VoiceService(string modelPath)
-    {
-        _modelPath = modelPath;
-    }
+    public VoiceService(string _) { }
 
     public bool Initialize()
     {
-        if (_model != null) return true;
-        if (!Directory.Exists(_modelPath)) return false;
-
-        Vosk.Vosk.SetLogLevel(-1);
-        _model = new Model(_modelPath);
-        return true;
+        try { _recognizer = new SpeechRecognizer(); return true; }
+        catch { return false; }
     }
-
-    public string ModelPath => _modelPath;
 
     public async Task StartRecordingAsync()
     {
-        if (_model == null && !Initialize())
+        if (_recognizer == null && !Initialize())
             throw new InvalidOperationException(
-                $"模型目录不存在: {_modelPath}`n请从 https://alphacephei.com/vosk/models 下载 vosk-model-cn-0.22`n解压到 VoiceCalendar/model/ 目录");
+                "Windows 语音引擎未就绪，请安装中文语音包（设置 → 时间和语言 → 语音）");
 
-        IsListening = true;
-        _accumulatedText = "";
+        _isListening = true;
+        _finalText = "";
 
-        _recognizer = new VoskRecognizer(_model, 16000.0f);
-        _recognizer.SetMaxAlternatives(0);
-        _recognizer.SetWords(false);
+        _recognizer!.Constraints.Clear();
+        _recognizer.Constraints.Add(
+            new SpeechRecognitionTopicConstraint(SpeechRecognitionScenario.Dictation, "dict"));
+        await _recognizer.CompileConstraintsAsync();
 
-        _waveIn = new WaveInEvent
-        {
-            WaveFormat = new WaveFormat(16000, 16, 1),
-            BufferMilliseconds = 100
-        };
+        _recognizer.HypothesisGenerated += OnHypothesis;
+        _recognizer.ContinuousRecognitionSession.ResultGenerated += OnResult;
 
-        _waveIn.DataAvailable += OnDataAvailable;
-        _waveIn.StartRecording();
-
-        await Task.CompletedTask;
+        await _recognizer.ContinuousRecognitionSession.StartAsync();
     }
 
-    public string StopRecording()
+    private void OnHypothesis(SpeechRecognizer sender, SpeechRecognitionHypothesisGeneratedEventArgs e)
     {
-        if (!IsListening) return "";
+        if (_isListening && !string.IsNullOrEmpty(e.Hypothesis.Text))
+            PartialResultChanged?.Invoke(e.Hypothesis.Text);
+    }
 
-        lock (_lock)
+    private void OnResult(SpeechContinuousRecognitionSession sender, SpeechContinuousRecognitionResultGeneratedEventArgs e)
+    {
+        if (_isListening && e.Result.Status == SpeechRecognitionResultStatus.Success)
+            _finalText = e.Result.Text?.Trim() ?? "";
+    }
+
+    public async Task<string> StopRecordingAsync()
+    {
+        if (!_isListening) return "";
+        _isListening = false;
+
+        try
         {
-            try { _waveIn?.StopRecording(); _waveIn?.Dispose(); } catch { }
-            _waveIn = null;
-
             if (_recognizer != null)
             {
-                var final = _recognizer.FinalResult();
-                var partialText = ParseText(final);
-                if (!string.IsNullOrEmpty(partialText))
-                    _accumulatedText += partialText;
-
-                _recognizer.Dispose();
-                _recognizer = null;
+                _recognizer.HypothesisGenerated -= OnHypothesis;
+                _recognizer.ContinuousRecognitionSession.ResultGenerated -= OnResult;
+                await _recognizer.ContinuousRecognitionSession.StopAsync();
             }
-
-            var result = string.IsNullOrEmpty(_accumulatedText)
-                ? "[未检测到语音]"
-                : _accumulatedText.Trim();
-
-            IsListening = false;
-            return result;
+            return string.IsNullOrEmpty(_finalText) ? "[未检测到语音]" : _finalText;
         }
-    }
-
-    private void OnDataAvailable(object? sender, WaveInEventArgs e)
-    {
-        lock (_lock)
+        catch
         {
-            if (_recognizer == null) return;
-
-            if (_recognizer.AcceptWaveform(e.Buffer, e.BytesRecorded))
-            {
-                var json = _recognizer.Result();
-                var text = ParseText(json);
-                if (!string.IsNullOrEmpty(text))
-                    _accumulatedText += text;
-            }
-
-            var partialJson = _recognizer.PartialResult();
-            var partialText = ParsePartial(partialJson);
-            if (!string.IsNullOrEmpty(partialText))
-                PartialResultChanged?.Invoke(partialText);
+            return "[未检测到语音]";
         }
     }
 
-    private static string ParsePartial(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return "";
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var text = doc.RootElement.GetProperty("partial").GetString();
-            return text ?? "";
-        }
-        catch { return ""; }
-    }
-
-    private static string ParseText(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return "";
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var text = doc.RootElement.GetProperty("text").GetString();
-            return text ?? "";
-        }
-        catch { return ""; }
-    }
+    public void DisposeModel() { _recognizer?.Dispose(); _recognizer = null; }
+    public bool IsModelLoaded => _recognizer != null;
 }

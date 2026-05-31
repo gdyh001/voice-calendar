@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 using VoiceCalendar.Models;
 using VoiceCalendar.Services;
@@ -13,25 +14,16 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
     private readonly NlpParserService _nlp = new();
-    private static string FindModelPath()
-    {
-        var modelDir = Path.Combine("model", "vosk-model-cn-0.22");
-        var candidates = new[] {
-            Directory.GetCurrentDirectory(),
-            AppDomain.CurrentDomain.BaseDirectory,
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."),
-        };
-        foreach (var basePath in candidates)
-        {
-            var full = Path.GetFullPath(Path.Combine(basePath, modelDir));
-            if (Directory.Exists(full)) return full;
-        }
-        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "model", "vosk-model-cn-0.22"));
-    }
 
-    private readonly VoiceService _voiceService = new(FindModelPath());
+    private readonly VoiceService _voiceService = new("");
     private System.Windows.Threading.DispatcherTimer? _recordTimer;
     private DateTime _scheduleDate;
+    private System.Windows.Threading.DispatcherTimer? _modelIdleTimer;
+    private enum EditMode { None, Start, End }
+    private EditMode _editMode = EditMode.None;
+    private DateTime _startDateTime;
+    private DateTime _endDateTime;
+    private bool _suppressEvents;
 
     public MainWindow()
     {
@@ -40,10 +32,10 @@ public partial class MainWindow : Window
 
 
         _voiceService.PartialResultChanged += (text) => Dispatcher.Invoke(() => TxtLiveText.Text = text);
-        // 加载 Vosk 语音模型
+        // 语音引擎按需初始化
         if (!_voiceService.Initialize())
         {
-            _vm.StatusText = "语音模型未加载，请下载 vosk-model-small-cn-0.22 到 model/ 目录";
+        // 语音引擎按需初始化
         }
 
         CalendarView.DateClicked += (date) =>
@@ -97,13 +89,12 @@ public partial class MainWindow : Window
         BtnNewFromSchedule.Visibility = Visibility.Collapsed;
         FormButtons.Visibility = Visibility.Visible;
 
-        DpStartDate.SelectedDate = _scheduleDate;
-        DpEndDate.SelectedDate = _scheduleDate;
         TxtEventTitle.Text = "";
-        CmbStartHour.SelectedIndex = 0;
-        CmbStartMin.SelectedIndex = 0;
-        CmbEndHour.SelectedIndex = 0;
-        CmbEndMin.SelectedIndex = 0;
+        _startDateTime = _scheduleDate.Date.AddHours(4);
+        _endDateTime = _scheduleDate.Date.AddHours(5);
+        _editMode = EditMode.None;
+        RefreshTimeDisplays();
+        LeaveEditMode();
     }
 
     private void BtnCancelForm_Click(object sender, RoutedEventArgs e)
@@ -118,24 +109,21 @@ public partial class MainWindow : Window
     {
         var title = TxtEventTitle.Text.Trim();
         if (string.IsNullOrEmpty(title))
-        {
-            MessageBox.Show("请输入日程名称", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
+            title = "日程";
 
-        var startDate = DpStartDate.SelectedDate?.Date ?? _scheduleDate;
-        var sh = (CmbStartHour.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        var sm = (CmbStartMin.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        string? startTime = string.IsNullOrEmpty(sh) ? null : $"{sh}:{sm ?? "00"}";
+        var startDate = _startDateTime.Date;
+        var startTime = $"{_startDateTime.Hour:D2}:{_startDateTime.Minute:D2}";
+        
+        
 
-        var endDate = DpEndDate.SelectedDate?.Date;
-        var eh = (CmbEndHour.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        var em = (CmbEndMin.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        string? endTime = string.IsNullOrEmpty(eh) ? null : $"{eh}:{em ?? "00"}";
+        var endDate = _endDateTime.Date;
+        string? endTime = $"{_endDateTime.Hour:D2}:{_endDateTime.Minute:D2}";
+        
+        
 
         _vm.AddEventManually(title, startDate, startTime);
-        if (endDate.HasValue && endDate.Value > startDate)
-            for (var d = startDate.AddDays(1); d <= endDate.Value; d = d.AddDays(1))
+        if (endDate > startDate)
+            for (var d = startDate.AddDays(1); d <= endDate; d = d.AddDays(1))
                 _vm.AddEventManually(title, d, null);
 
         CalendarView.Refresh();
@@ -160,9 +148,9 @@ public partial class MainWindow : Window
     private async void StartRecording()
     {
         BtnVoiceIdle.Visibility = Visibility.Collapsed;
-        BtnVoiceRecording.Visibility = Visibility.Visible;;
+        BtnVoiceRecording.Visibility = Visibility.Visible;
         TxtLiveText.Visibility = Visibility.Visible;
-        TxtLiveText.Text = "";
+        TxtLiveText.Text = "识别中...";
 
         _recordTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -184,7 +172,7 @@ public partial class MainWindow : Window
             _recordTimer.Stop();
             BtnVoiceIdle.Visibility = Visibility.Visible;
             BtnVoiceRecording.Visibility = Visibility.Collapsed;
-        TxtLiveText.Visibility = Visibility.Collapsed;
+            TxtLiveText.Visibility = Visibility.Collapsed;
             MessageBox.Show(ex.Message, "模型未找到");
         }
         catch (UnauthorizedAccessException)
@@ -204,10 +192,13 @@ public partial class MainWindow : Window
 
 
     }
-    private void StopAndProcess()
+    private void ResetModelIdleTimer() { _modelIdleTimer?.Stop(); _modelIdleTimer?.Start(); }
+
+    private async void StopAndProcess()
     {
         _recordTimer?.Stop();
-        var text = _voiceService.StopRecording();
+        var text = await _voiceService.StopRecordingAsync();
+        ResetModelIdleTimer();
         BtnVoiceIdle.Visibility = Visibility.Visible;
         BtnVoiceRecording.Visibility = Visibility.Collapsed;
 
@@ -223,21 +214,13 @@ public partial class MainWindow : Window
         var today = DateTime.Today;
 
         TxtEventTitle.Text = parsed.Title;
-        DpStartDate.SelectedDate = parsed.Date ?? today;
-        DpEndDate.SelectedDate = parsed.Date ?? today;
+        _startDateTime = (parsed.Date ?? today).Date.AddHours(parsed.Hour ?? 4).AddMinutes(parsed.Minute ?? 0);
+        _endDateTime = _startDateTime.AddHours(1);
 
-        if (parsed.Hour.HasValue)
-        {
-            SetComboBox(CmbStartHour, parsed.Hour.Value);
-            SetComboBox(CmbStartMin, parsed.Minute ?? 0);
-        }
-        else
-        {
-            CmbStartHour.SelectedIndex = 0;
-            CmbStartMin.SelectedIndex = 0;
-        }
-        CmbEndHour.SelectedIndex = 0;
-        CmbEndMin.SelectedIndex = 0;
+        _editMode = EditMode.None;
+        RefreshTimeDisplays();
+        LeaveEditMode();
+
 
         SchedulePanel.Visibility = Visibility.Collapsed;
         FormPanel.Visibility = Visibility.Visible;
@@ -247,18 +230,6 @@ public partial class MainWindow : Window
         _vm.StatusText = $"语音识别: {text}";
     }
 
-    private static void SetComboBox(ComboBox cb, int value)
-    {
-        foreach (ComboBoxItem item in cb.Items)
-        {
-            if (item.Content?.ToString() == value.ToString("D2"))
-            {
-                item.IsSelected = true;
-                return;
-            }
-        }
-        cb.SelectedIndex = 0;
-    }
 
     // === 右键 ===
     private void MenuItemEdit_Click(object sender, RoutedEventArgs e)
@@ -288,8 +259,125 @@ public partial class MainWindow : Window
             }
         }
     }
-}
 
+
+    // === iOS 时间选择器 ===
+    private void RefreshTimeDisplays()
+    {
+        if (TxtStartDisplay != null)
+            TxtStartDisplay.Text = FormatDateTime(_startDateTime);
+        if (TxtEndDisplay != null)
+            TxtEndDisplay.Text = FormatDateTime(_endDateTime);
+    }
+
+    private static string FormatDateTime(DateTime dt)
+    {
+        var ampm = dt.Hour < 12 ? "上午" : "下午";
+        var h = dt.Hour % 12;
+        if (h == 0) h = 12;
+        return $"{dt.Month}月{dt.Day}日 {ampm}{h}:{dt.Minute:D2}";
+    }
+
+    private void SyncPickersToEditMode()
+    {
+        if (CmbAmPm == null || CmbHour == null || CmbMinute == null) return;
+        _suppressEvents = true;
+        var dt = _editMode == EditMode.Start ? _startDateTime : _endDateTime;
+        CmbAmPm.SelectedIndex = dt.Hour < 12 ? 0 : 1;
+        var h = dt.Hour % 12;
+        if (h == 0) h = 12;
+        CmbHour.SelectedIndex = h - 1;
+        CmbMinute.SelectedIndex = dt.Minute / 5;
+        _suppressEvents = false;
+    }
+
+    private void ApplyPickerValues()
+    {
+        if (CmbAmPm == null || CmbHour == null || CmbMinute == null) return;
+        var isPM = CmbAmPm.SelectedIndex == 1;
+        var h = CmbHour.SelectedIndex + 1; // 1-12
+        if (isPM && h == 12) h = 12;
+        else if (isPM) h += 12;
+        else if (!isPM && h == 12) h = 0;
+        var m = CmbMinute.SelectedIndex * 5;
+
+        if (_editMode == EditMode.Start)
+        {
+            _startDateTime = _startDateTime.Date.AddHours(h).AddMinutes(m);
+            if (_startDateTime > _endDateTime)
+                _endDateTime = _startDateTime;
+        }
+        else
+        {
+            _endDateTime = _endDateTime.Date.AddHours(h).AddMinutes(m);
+            if (_endDateTime < _startDateTime)
+                _endDateTime = _startDateTime;
+        }
+        RefreshTimeDisplays();
+    }
+
+    private void EnterEditMode(EditMode mode)
+    {
+        if (_editMode == mode) { LeaveEditMode(); return; }
+        _editMode = mode;
+        // Highlight rows
+        if (StartRow != null) StartRow.Background = mode == EditMode.Start
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE3, 0xF2, 0xFD))
+            : System.Windows.Media.Brushes.Transparent;
+        if (EndRow != null) EndRow.Background = mode == EditMode.End
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE3, 0xF2, 0xFD))
+            : System.Windows.Media.Brushes.Transparent;
+        if (TimePickerPanel != null) TimePickerPanel.Visibility = Visibility.Visible;
+        SyncPickersToEditMode();
+    }
+
+    private void LeaveEditMode()
+    {
+        _editMode = EditMode.None;
+        if (StartRow != null) StartRow.Background = System.Windows.Media.Brushes.Transparent;
+        if (EndRow != null) EndRow.Background = System.Windows.Media.Brushes.Transparent;
+        if (TimePickerPanel != null) TimePickerPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void StartRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_suppressEvents) return;
+        e.Handled = true;
+        EnterEditMode(EditMode.Start);
+    }
+
+    private void EndRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_suppressEvents) return;
+        e.Handled = true;
+        EnterEditMode(EditMode.End);
+    }
+
+    private void TimePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        ApplyPickerValues();
+    }
+
+    private void HiddenDatePicker_DateChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents || HiddenDatePicker == null) return;
+        if (_editMode == EditMode.Start)
+        {
+            var t = _startDateTime.TimeOfDay;
+            _startDateTime = (HiddenDatePicker.SelectedDate ?? DateTime.Today).Date + t;
+            if (_startDateTime > _endDateTime) _endDateTime = _startDateTime;
+        }
+        else if (_editMode == EditMode.End)
+        {
+            var t = _endDateTime.TimeOfDay;
+            _endDateTime = (HiddenDatePicker.SelectedDate ?? DateTime.Today).Date + t;
+            if (_endDateTime < _startDateTime) _endDateTime = _startDateTime;
+        }
+        RefreshTimeDisplays();
+    }
+
+}
 public class AddEventDialog : Window
 {
     public string EventTitle { get; private set; } = "";
@@ -307,7 +395,7 @@ public class AddEventDialog : Window
         g.Children.Add(Lbl("时间 (HH:mm)", 12, 0, 4)); var tm = Tb("", 80); Grid.SetRow(tm, 5); g.Children.Add(tm);
         var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
         var cancel = Btn("取消", "#8E8E93", () => { DialogResult = false; Close(); });
-        var save = Btn("保存", "#007AFF", () => { var t = tb.Text.Trim(); if (string.IsNullOrEmpty(t)) { MessageBox.Show("请输入日程名称"); return; } EventTitle = t; EventDate = dp.SelectedDate?.Date ?? DateTime.Today; var t2 = tm.Text.Trim(); if (!string.IsNullOrEmpty(t2) && !System.Text.RegularExpressions.Regex.IsMatch(t2, @"^\d{2}:\d{2}$")) { MessageBox.Show("时间格式 HH:mm"); return; } EventTime = string.IsNullOrEmpty(t2) ? null : t2; DialogResult = true; Close(); });
+        var save = Btn("保存", "#007AFF", () => { var t = tb.Text.Trim(); if (string.IsNullOrEmpty(t)) { t = "日程"; } EventTitle = t; EventDate = dp.SelectedDate?.Date ?? DateTime.Today; var t2 = tm.Text.Trim(); if (!string.IsNullOrEmpty(t2) && !System.Text.RegularExpressions.Regex.IsMatch(t2, @"^\d{2}:\d{2}$")) { MessageBox.Show("时间格式 HH:mm"); return; } EventTime = string.IsNullOrEmpty(t2) ? null : t2; DialogResult = true; Close(); });
         btns.Children.Add(cancel); btns.Children.Add(save); Grid.SetRow(btns, 6); g.Children.Add(btns); Content = g;
     }
     static TextBlock Lbl(string t, int top, int btm, int bot) => new() { Text = t, FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1C,0x1C,0x1E)), Margin = new Thickness(0, top, btm, bot) };
@@ -334,7 +422,7 @@ public class EditEventDialog : Window
         var cancel = new Button { Content = "取消", FontSize = 14, Padding = new Thickness(12, 6, 12, 6), Background = System.Windows.Media.Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x8E,0x8E,0x93)), Cursor = System.Windows.Input.Cursors.Hand };
         cancel.Click += (_, _) => { DialogResult = false; Close(); };
         var save = new Button { Content = "保存", FontSize = 14, FontWeight = FontWeights.SemiBold, Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(8, 0, 0, 0), Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x00,0x7A,0xFF)), Foreground = System.Windows.Media.Brushes.White, BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand };
-        save.Click += (_, _) => { var t = tb.Text.Trim(); if (string.IsNullOrEmpty(t)) { MessageBox.Show("请输入日程名称"); return; } EventTitle = t; EventDate = dp.SelectedDate?.Date ?? DateTime.Today; var t2 = tm.Text.Trim(); if (!string.IsNullOrEmpty(t2) && !System.Text.RegularExpressions.Regex.IsMatch(t2, @"^\d{2}:\d{2}$")) { MessageBox.Show("时间格式 HH:mm"); return; } EventTime = string.IsNullOrEmpty(t2) ? null : t2; DialogResult = true; Close(); };
+        save.Click += (_, _) => { var t = tb.Text.Trim(); if (string.IsNullOrEmpty(t)) { t = "日程"; } EventTitle = t; EventDate = dp.SelectedDate?.Date ?? DateTime.Today; var t2 = tm.Text.Trim(); if (!string.IsNullOrEmpty(t2) && !System.Text.RegularExpressions.Regex.IsMatch(t2, @"^\d{2}:\d{2}$")) { MessageBox.Show("时间格式 HH:mm"); return; } EventTime = string.IsNullOrEmpty(t2) ? null : t2; DialogResult = true; Close(); };
         btns.Children.Add(cancel); btns.Children.Add(save); Grid.SetRow(btns, 6); g.Children.Add(btns); Content = g;
     }
     static TextBlock Lbl(string t, int top, int btm, int bot) => new() { Text = t, FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1C,0x1C,0x1E)), Margin = new Thickness(0, top, btm, bot) };
