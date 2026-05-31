@@ -12,7 +12,7 @@ namespace VoiceCalendar.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    private readonly EventStorageService _storage = new();
+    private readonly EventStorageService _storage = EventStorageService.Instance;
     private readonly NlpParserService _nlp = new();
     private readonly ReminderService _reminder;
 
@@ -33,12 +33,8 @@ public class MainViewModel : INotifyPropertyChanged
         set { _selectedDate = value.Date; OnPropertyChanged(); RefreshEvents(); }
     }
 
-    private ObservableCollection<CalendarEvent> _events = new();
-    public ObservableCollection<CalendarEvent> Events
-    {
-        get => _events;
-        set { _events = value; OnPropertyChanged(); }
-    }
+    public ObservableCollection<CalendarEvent> Events { get; } = new();
+    
 
     private string _statusText = "就绪";
     public string StatusText
@@ -100,7 +96,7 @@ public class MainViewModel : INotifyPropertyChanged
     public void RefreshEvents()
     {
         var list = _storage.GetEventsByDate(SelectedDate);
-        Events = new ObservableCollection<CalendarEvent>(list);
+        Events.Clear(); foreach (var e in list) Events.Add(e);
         StatusText = list.Count > 0
             ? $"{SelectedDate:yyyy年MM月dd日} - {list.Count}个事件"
             : $"{SelectedDate:yyyy年MM月dd日} - 暂无事件";

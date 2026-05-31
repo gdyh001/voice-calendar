@@ -15,8 +15,8 @@ public class ReminderService
 
     public ReminderService()
     {
-        _storage = new EventStorageService();
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _storage = EventStorageService.Instance;
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         _timer.Tick += CheckReminders;
     }
 
