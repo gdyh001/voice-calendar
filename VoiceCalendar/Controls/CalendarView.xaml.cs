@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -17,6 +17,9 @@ public partial class CalendarView : UserControl
     private readonly EventStorageService _storage = EventStorageService.Instance;
     private readonly List<DayCell> _dayCells = new();
 
+    private int _pickerYear;
+    private bool _pickerIsForYear;
+
     public event Action<DateTime>? DateClicked;
 
     public CalendarView()
@@ -28,7 +31,8 @@ public partial class CalendarView : UserControl
 
     public void Refresh()
     {
-        TxtMonthYear.Text = $"{CurrentMonth.Year}年{CurrentMonth.Month}月";
+        TxtYear.Text = CurrentMonth.Year.ToString();
+        TxtMonth.Text = $"{CurrentMonth.Month}月";
         var eventCounts = _storage.GetEventCountsForMonth(CurrentMonth.Year, CurrentMonth.Month);
 
         var firstDay = new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1);
@@ -78,10 +82,150 @@ public partial class CalendarView : UserControl
         Refresh();
     }
 
+    private void BtnToday_Click(object sender, RoutedEventArgs e)
+    {
+        CurrentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        SelectedDate = DateTime.Today;
+        Refresh();
+        DateClicked?.Invoke(SelectedDate);
+    }
+
     private void BtnNext_Click(object sender, RoutedEventArgs e)
     {
         CurrentMonth = CurrentMonth.AddMonths(1);
         Refresh();
+    }
+
+    // === 年月选择器 ===
+
+    private void TxtYear_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _pickerYear = CurrentMonth.Year;
+        _pickerIsForYear = true;
+        ShowYearPicker();
+    }
+
+    private void TxtMonth_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _pickerYear = CurrentMonth.Year;
+        _pickerIsForYear = false;
+        ShowMonthPicker();
+    }
+
+    private void ShowYearPicker()
+    {
+        DayGrid.Visibility = Visibility.Collapsed;
+        MonthGrid.Visibility = Visibility.Collapsed;
+        YearScrollViewer.Visibility = Visibility.Visible;
+        PickerPanel.Visibility = Visibility.Visible;
+        TxtPickerTitle.Text = "选择年份";
+
+        YearGrid.Children.Clear();
+        for (int y = 2010; y <= 2050; y++)
+        {
+            var btn = CreatePickerButton(y.ToString(), y == _pickerYear);
+            int year = y;
+            btn.MouseLeftButtonDown += (_, _) => YearButton_Click(year);
+            YearGrid.Children.Add(btn);
+        }
+
+        // Scroll to current year
+        YearScrollViewer.ScrollToTop();
+        int row = (_pickerYear - 2010) / 3;
+        double offset = row * 44.0;
+        YearScrollViewer.ScrollToVerticalOffset(Math.Max(0, offset - 100));
+    }
+
+    private void ShowMonthPicker()
+    {
+        DayGrid.Visibility = Visibility.Collapsed;
+        YearScrollViewer.Visibility = Visibility.Collapsed;
+        MonthGrid.Visibility = Visibility.Visible;
+        PickerPanel.Visibility = Visibility.Visible;
+        TxtPickerTitle.Text = "选择月份";
+
+        MonthGrid.Children.Clear();
+        for (int m = 1; m <= 12; m++)
+        {
+            bool isCurrent = _pickerYear == CurrentMonth.Year && m == CurrentMonth.Month;
+            var btn = CreatePickerButton($"{m}月", isCurrent);
+            int month = m;
+            btn.MouseLeftButtonDown += (_, _) => MonthButton_Click(month);
+            MonthGrid.Children.Add(btn);
+        }
+    }
+
+    private void PickerBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (MonthGrid.Visibility == Visibility.Visible && _pickerIsForYear)
+        {
+            // From month picker back to year picker
+            ShowYearPicker();
+        }
+        else
+        {
+            // From year picker or direct month picker: cancel
+            PickerCancel_Click(sender, e);
+        }
+    }
+
+    private void PickerCancel_Click(object sender, RoutedEventArgs e)
+    {
+        PickerPanel.Visibility = Visibility.Collapsed;
+        DayGrid.Visibility = Visibility.Visible;
+    }
+
+    private void YearButton_Click(int year)
+    {
+        _pickerYear = year;
+        ShowMonthPicker();
+    }
+
+    private void MonthButton_Click(int month)
+    {
+        CurrentMonth = new DateTime(_pickerYear, month, 1);
+        // Adjust SelectedDate: keep same day if valid, else fall back to 1st
+        int day = Math.Min(SelectedDate.Day, DateTime.DaysInMonth(_pickerYear, month));
+        SelectedDate = new DateTime(_pickerYear, month, day);
+        PickerPanel.Visibility = Visibility.Collapsed;
+        DayGrid.Visibility = Visibility.Visible;
+        Refresh();
+        DateClicked?.Invoke(SelectedDate);
+    }
+
+    private static Border CreatePickerButton(string text, bool isSelected)
+    {
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Margin = new Thickness(2),
+            Height = 40,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Background = isSelected
+                ? new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xFF))
+                : new SolidColorBrush(Colors.Transparent),
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = 14,
+                FontWeight = isSelected ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = isSelected
+                    ? new SolidColorBrush(Colors.White)
+                    : new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+
+        if (!isSelected)
+        {
+            border.MouseEnter += (_, _) =>
+                border.Background = new SolidColorBrush(Color.FromRgb(0xE5, 0xE5, 0xEA));
+            border.MouseLeave += (_, _) =>
+                border.Background = new SolidColorBrush(Colors.Transparent);
+        }
+
+        return border;
     }
 
     private void BuildDayGrid()
